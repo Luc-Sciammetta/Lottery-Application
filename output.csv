@@ -1,4 +1,5 @@
-DrawNumber,DrawDate,0,1,2,3,4,Powerball,5 + Powerball Count,5 + Powerball Amount,5 Count,5 Amount,4 + Powerball Count,4 + Powerball Amount,4 Count,4 Amount,3 + Powerball Count,3 + Powerball Amount,3 Count,3 Amount,2 + Powerball Count,2 + Powerball Amount,1 + Powerball Count,1 + Powerball Amount,0 + Powerball Count,0 + Powerball Amount
+DrawNumber,drawing_date,1,2,3,4,5,powerball,5 + Powerball Count,5 + Powerball Amount,5 Count,5 Amount,4 + Powerball Count,4 + Powerball Amount,4 Count,4 Amount,3 + Powerball Count,3 + Powerball Amount,3 Count,3 Amount,2 + Powerball Count,2 + Powerball Amount,1 + Powerball Count,1 + Powerball Amount,0 + Powerball Count,0 + Powerball Amount
+1543,2025-11-29T08:00:00,19,22,30,32,59,1,0,719000000,0,280948,4,17980,92,390,215,173,5410,7,4410,9,34163,5,81689,4
 1542,2025-11-26T08:00:00,7,8,15,19,28,3,0,681000000,1,979462,4,13891,116,239,256,112,6358,5,4385,7,29035,4,64250,4
 1541,2025-11-24T08:00:00,8,16,26,30,58,14,0,654000000,0,762413,1,44902,58,387,164,142,3793,7,2949,8,22198,5,52578,4
 1540,2025-11-22T08:00:00,28,32,36,51,69,2,0,629000000,0,587015,2,55825,60,551,192,178,4945,8,4040,9,30680,5,76260,4
@@ -116,4 +117,3 @@ DrawNumber,DrawDate,0,1,2,3,4,Powerball,5 + Powerball Count,5 + Powerball Amount
 1428,2025-03-05T08:00:00,24,28,40,63,65,20,0,295000000,0,4153176,2,16169,37,436,79,212,2186,8,1870,9,15329,5,37222,4
 1427,2025-03-03T08:00:00,18,20,50,52,56,20,0,279000000,0,4026853,2,38848,37,408,115,136,2151,8,1859,9,13998,5,34897,4
 1426,2025-03-01T08:00:00,2,23,36,44,49,25,0,272000000,0,3908796,0,47473,58,409,133,185,3658,7,2969,9,23018,5,54630,4
-1425,2025-02-26T08:00:00,28,48,55,60,62,20,0,248000000,0,3723354,4,8149,28,582,73,232,2368,8,1935,9,14724,5,37235,4

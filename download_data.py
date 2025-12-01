@@ -36,15 +36,15 @@ def download_results():
     game = GAMES['POWERBALL']
     fieldnames = {
         'DrawNumber': 'DrawNumber',
-        'DrawDate': 'DrawDate',
+        'drawing_date': 'DrawDate',
 
         # Winning Numbers
-        '0': 'WinningNumbers."0".Number',
-        '1': 'WinningNumbers."1".Number',
-        '2': 'WinningNumbers."2".Number',
-        '3': 'WinningNumbers."3".Number',
-        '4': 'WinningNumbers."4".Number',
-        'Powerball': 'WinningNumbers."5".Number',
+        '1': 'WinningNumbers."0".Number',
+        '2': 'WinningNumbers."1".Number',
+        '3': 'WinningNumbers."2".Number',
+        '4': 'WinningNumbers."3".Number',
+        '5': 'WinningNumbers."4".Number',
+        'powerball': 'WinningNumbers."5".Number',
 
         # Prize amounts
         # TODO Populate the titles from the json instead of hard coding.

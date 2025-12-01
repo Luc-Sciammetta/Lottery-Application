@@ -1,0 +1,39 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+
+# Virtual environments
+env/
+venv/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# SQLite / cache files
+*.sqlite
+*.db
+cache.sqlite
+
+# Logs
+*.log
+
+# --- VS Code ---
+.vscode/
+
+# OS-specific
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Misc ---
+*.tmp
+*.bak

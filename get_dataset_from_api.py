@@ -46,6 +46,8 @@ def make_dataset():
     
     df = df.iloc[::-1].reset_index(drop=True)
 
+    df.rename(columns={'ball1': 1, 'ball2': 2, 'ball3': 3, 'ball4': 4, 'ball5': 5}, inplace=True)
+
     df.to_csv("lottery.csv", index=False)
     print(df)
 
@@ -73,6 +75,8 @@ def add_dates_to_dataset(start_date, end_date):
                     .str.replace(",", "", regex=False)
                     .str.replace(".", "", regex=False)
                     .astype(int))
+    
+    df_new.rename(columns={'ball1': 1, 'ball2': 2, 'ball3': 3, 'ball4': 4, 'ball5': 5}, inplace=True)
     
     df_existing = pd.read_csv("lottery.csv")
     df_combined = pd.concat([df_existing, df_new]).drop_duplicates().reset_index(drop=True)
