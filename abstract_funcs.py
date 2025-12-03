@@ -19,16 +19,16 @@ def get_data_from_date(draw_date, df, hms=False):
             if row['drawing_date'] == draw_date:
                 return row
 
-def convert_to_pd(file_path, df):
+def convert_to_pd(game, df):
     """
     Convert a CSV file to a pandas DataFrame.
     Args:
-        file_path (str): The path to the CSV file.
+        game (str): The name of the game corresponding to the CSV file.
         df (pd.DataFrame): The DataFrame to populate.
     Returns:
             pd.DataFrame: The converted DataFrame.
     """
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(f"{game}.csv")
     return df
 
 def check_for_matched(user_numbers, powerball, data):
@@ -42,11 +42,11 @@ def check_for_matched(user_numbers, powerball, data):
         dict: A dictionary with matched numbers and powerball status.
     """
     winning_numbers = [
-        data['1'],
-        data['2'],
-        data['3'],
-        data['4'],
-        data['5'],
+        data['ball1'],
+        data['ball2'],
+        data['ball3'],
+        data['ball4'],
+        data['ball5'],
     ]
     winning_powerball = data['powerball']
 
