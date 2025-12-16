@@ -35,7 +35,7 @@ def get_response(url, headers):
     response = requests.get(url, headers=headers)
     return response.json()
 
-def make_dataset(game, start_date="2025-01-01", end_date="2026-01-01"):
+def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
     """ Create the dataset and save it to a CSV file. 
     Args:
         game (str): The lottery game to fetch data for.
@@ -114,8 +114,8 @@ def get_dataset(game):
 
 
 def main():
-    make_dataset("powerball")
-    add_dates_to_dataset("powerball", "2024-01-01", "2025-01-01")
+    make_dataset("euromillions")
+    # add_dates_to_dataset("powerball", "2024-01-01", "2025-01-01")
     # print(get_dataset("powerball"))
     pass
 main()
