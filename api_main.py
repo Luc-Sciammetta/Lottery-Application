@@ -13,5 +13,4 @@ def main():
     powerball = 22
     pprint.pprint(abstract_funcs.check_for_win(numbers, powerball, df))
 
-
 main()

@@ -13,12 +13,8 @@ This will be done using image recognition techniques to determine lottery ticket
 - This has support for the following lottery games:
   - Powerball
   - Mega Millions
-  - Lucky for Life (untested)
-  - Cash4Life (untested)
-  - Lotto America (untested)
-  - Cash Pop (untested)
-  - EuroMillions (untested)
-  - EuroJackpot (untested)
+  - Lotto America
+  - EuroMillions
 
 ## Things to add
 - Image recognition for lottery tickets and number extraction.
