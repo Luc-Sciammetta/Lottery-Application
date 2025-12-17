@@ -5,11 +5,15 @@ import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
+from torch.utils.data import random_split
+from torch.utils.data import Subset
 
 from PIL import Image
 
-#defines the image transformations that will be applied to each image in the dataset
-transform = transforms.Compose([
+data_split_ratio = 0.8
+
+#TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
+train_transform = transforms.Compose([
     transforms.Resize((224, 224)), #resizes each image to 224x224 pixels
     transforms.RandomHorizontalFlip(), #randomly flips the image horizontally
     transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
@@ -18,12 +22,33 @@ transform = transforms.Compose([
     transforms.ToTensor() #converts the image to a PyTorch tensor
 ])
 
-dataset = ImageFolder(root = "images", transform=transform) #makes the dataset
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True) #feeds the dataset into the model in batches
+#TEST IMAGES ONLY: same as above but without the random augmentations
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
+
+#make the train and test dataset objects
+train_dataset = ImageFolder(root = "images", transform=train_transform) 
+test_dataset = ImageFolder(root="images", transform=test_transform)
+
+#determine the sizes of the train and test datasets
+data_size = len(train_dataset)
+train_size = int(data_split_ratio * data_size)
+test_size = data_size - train_size
+
+#spit the dataset (indices) into training and testing sets
+train_indices, test_indices = random_split(range(data_size), [train_size, test_size])
+
+#actually create the training and testing datasets using the indices from above
+train_dataset = Subset(train_dataset, train_indices)
+test_dataset = Subset(test_dataset, test_indices)
+
+#create the dataloaders for training and testing (they feed the data into the model in batches)
+train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False) #here we don't need to shuffle the test data
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
-
-print(dataset.classes) #prints the classes found in the dataset ['powerball', 'euromillions', 'megamillions', 'lottoamerica']
 
 class SimpleCNN(nn.Module):
     """ A simple Convolutional Neural Network for image classification. 
@@ -89,7 +114,7 @@ def train_model(epochs = 10, savepath="model_weights.pth"):
         correct = 0 #number of correct predictions
         total = 0 #total number of predictions
 
-        for images, labels in dataloader: #gives batches of 32 images and their corresponding labels
+        for images, labels in train_dataloader: #gives batches of 32 images and their corresponding labels
             images, labels = images.to(device), labels.to(device)  #does things with putting the images and model on GPU/CPU
 
             optimizer.zero_grad() #clears old gradients from the previous batch
@@ -106,11 +131,32 @@ def train_model(epochs = 10, savepath="model_weights.pth"):
             correct += (predicted == labels).sum().item() #updates the number of correct predictions
 
         accuracy = 100*(correct/total) #calculates the accuracy for this epoch
-        print(f"Epoch {epoch+1}, Loss: {running_loss:.3f}, Accuracy: {accuracy:.2f}%")
+        print(f"Training Epoch {epoch+1}, Loss: {running_loss:.3f}, Accuracy: {accuracy:.2f}%")
 
     torch.save(model.state_dict(), savepath) #saves the model weights to a file
 
     return model
+
+def test_model(model):
+    """ Test the CNN model on the test dataset.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+    """
+    model.eval() #sets the model to evaluation mode
+    correct = 0
+    total = 0
+
+    with torch.no_grad(): #tells PyTorch not to calculate gradients (saves memory and computations)
+        for images, labels in test_dataloader:
+            images, labels = images.to(device), labels.to(device) #does things with putting the images and model on GPU/CPU
+
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    accuracy = 100 * (correct / total)
+    print(f"Test Accuracy: {accuracy:.2f}%")
 
 def load_model(filepath):
     """ Load the trained CNN model from a file.
@@ -133,18 +179,20 @@ def predict_image(model, image_path):
         str: The predicted class name.
     """
     img = Image.open(image_path).convert("RGB") #opens the image and converts it to RGB format
-    img = transform(img).unsqueeze(0).to(device) #applies the transformations defined before
+    img = test_transform(img).unsqueeze(0).to(device) #applies the transformations defined before
 
     model.eval() #sets the model to evaluation mode
     with torch.no_grad(): #tells PyTorch not to calculate gradients (saves memory and computations)
         output = model(img) #passes the image through the network
         predicted = output.argmax(dim = 1) #gets the index of the classification with the highest score
     
-    print(f"Predicted Class: {dataset.classes[predicted.item()]}")
-    return dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
+    print(f"Predicted Class: {test_dataset.classes[predicted.item()]}")
+    return test_dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
 
 def main():
-    model = train_model(epochs = 45) #trains the model
+    model = train_model(epochs = 30) #trains the model
+    test_model(model) #tests the trained model
+    
     # model = load_model("model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
     # test_image_path = "images/megamillions/img3.jpg" #path to a test image
     # predict_image(model, test_image_path)
