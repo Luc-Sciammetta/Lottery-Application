@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,7 +12,9 @@ from torch.utils.data import Subset
 
 from PIL import Image
 
-data_split_ratio = 0.8
+train_ratio = 0.7
+validation_ratio = 0.15
+test_ratio = 0.15
 
 #TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
 train_transform = transforms.Compose([
@@ -30,22 +34,24 @@ test_transform = transforms.Compose([
 
 #make the train and test dataset objects
 train_dataset = ImageFolder(root = "images", transform=train_transform) 
-test_dataset = ImageFolder(root="images", transform=test_transform)
+evaluation_dataset = ImageFolder(root="images", transform=test_transform)
 
-#determine the sizes of the train and test datasets
+#determine the sizes of the train, validation, and test datasets
 data_size = len(train_dataset)
-train_size = int(data_split_ratio * data_size)
-test_size = data_size - train_size
+train_size = int(train_ratio * data_size)
+validation_size = int(validation_ratio * data_size)
+test_size = data_size - train_size - validation_size
 
-#spit the dataset (indices) into training and testing sets
-train_indices, test_indices = random_split(range(data_size), [train_size, test_size])
-
-#actually create the training and testing datasets using the indices from above
+#spit the dataset (indices) into training, validation, and testing sets
+train_indices, validation_indices, test_indices = random_split(range(data_size), [train_size, validation_size, test_size])
+#actually create the training, validation, and testing datasets using the indices from above
 train_dataset = Subset(train_dataset, train_indices)
-test_dataset = Subset(test_dataset, test_indices)
+validation_dataset = Subset(evaluation_dataset, validation_indices)
+test_dataset = Subset(evaluation_dataset, test_indices)
 
 #create the dataloaders for training and testing (they feed the data into the model in batches)
 train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+validation_dataloader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
 test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False) #here we don't need to shuffle the test data
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
@@ -75,8 +81,11 @@ class SimpleCNN(nn.Module):
         #also done to make the model focus on the most important features
         self.pool = nn.MaxPool2d(2, 2)
 
+        self.dropout = nn.Dropout(p=0.5) #a dropout to prevent the model from overfitting
+                                         #it works by randomly setting some of the neurons to zero during training
+
         #the nn nodes that make the final classification decision (kinda like a traditional neural network)
-        self.fc1 = nn.Linear(64 * 28 * 28, 128)
+        self.fc1 = nn.Linear(64 * 14 * 14, 128)
         self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -89,24 +98,37 @@ class SimpleCNN(nn.Module):
         x = self.pool(F.relu(self.conv1(x))) #apply conv1, then use the ReLU activation function, then apply pooling
         x = self.pool(F.relu(self.conv2(x))) 
         x = self.pool(F.relu(self.conv3(x))) 
+        x = self.pool(x) #apply pooling here to reduce the amount of input size for the NN layers
 
 
         x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x28x28, now 50176x1)
         x = F.relu(self.fc1(x)) #go through the first nn layer
+        x = self.dropout(x) #apply dropout
         x = self.fc2(x) #go through the second nn layer to get the final output (which is the class scores)
         return x
 
-def train_model(epochs = 10, savepath="model_weights.pth"):
+def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
     """ train the CNN model on the dataset.
     Args:
         epochs (int): Number of training epochs.
+        patience (int): Number of epochs to wait for improvement before stopping.
         savepath (str): Path to save the trained model weights.
     Returns:
         SimpleCNN: The trained CNN model.
     """
     model = SimpleCNN().to(device) #sends the model to the device (GPU or CPU)
-    loss_function = nn.CrossEntropyLoss() #loss function for multi-class classification problems
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.001) #updates the model's weights and uses a learning rate (alpha) of 0.001
+
+    #calculate class weights to handle class image data counts imbalance
+    class_counts = torch.tensor([count_files_in_directory("images/powerball"), count_files_in_directory("images/euromillions"), count_files_in_directory("images/lottoamerica"), count_files_in_directory("images/megamillions")], dtype=torch.float)
+    weights = 1.0 / class_counts
+    weights = weights / weights.sum() * len(class_counts)
+    loss_function = nn.CrossEntropyLoss(weight=weights.to(device)) #loss function for multi-class classification problems
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr = 0.001, weight_decay=1e-4) #updates the model's weights and uses a learning rate (alpha) of 0.001
+                                                                                    #weight_decay is used to prevent overfitting by penalizing model weights that are very large
+
+    best_validation_loss = float('inf') #initialize the best validation loss to infinity
+    num_epochs_no_improvement = 0 #counter for the number of epochs with no improvement
 
     num_epochs = epochs #number of times the model will go through the entire dataset
     for epoch in range(num_epochs):
@@ -132,6 +154,36 @@ def train_model(epochs = 10, savepath="model_weights.pth"):
 
         accuracy = 100*(correct/total) #calculates the accuracy for this epoch
         print(f"Training Epoch {epoch+1}, Loss: {running_loss:.3f}, Accuracy: {accuracy:.2f}%")
+
+        #validate the model on the validation dataset
+        model.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for images, labels in validation_dataloader:
+                images, labels = images.to(device), labels.to(device)
+
+                outputs = model(images)
+                loss = loss_function(outputs, labels)
+
+                val_loss += loss.item()
+
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        val_accuracy = 100 * (correct / total)
+        print(f"Validation Loss: {val_loss:.3f}, Validation Accuracy: {val_accuracy:.2f}%")
+
+        if val_loss < best_validation_loss:
+            best_validation_loss = val_loss
+            num_epochs_no_improvement = 0
+            torch.save(model.state_dict(), savepath) #saves the model with the best weights to a file (so that we keep the best one and we have it if we need to stop)
+        else:
+            num_epochs_no_improvement += 1
+            if num_epochs_no_improvement >= patience:
+                print("Early stopping due to no improvement in validation loss.")
+                break
 
     torch.save(model.state_dict(), savepath) #saves the model weights to a file
 
@@ -189,11 +241,27 @@ def predict_image(model, image_path):
     print(f"Predicted Class: {test_dataset.classes[predicted.item()]}")
     return test_dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
 
+def count_files_in_directory(directory):
+    """ Count the number of files in a directory.
+    Args:
+        directory (str): The path to the directory.
+    Returns:
+        int: The number of files in the directory.
+    """
+    count = 0
+    for entry in os.listdir(directory):
+        full_path = os.path.join(directory, entry) #get the full path of the entry (file)
+        if os.path.isfile(full_path): #check if this entry is a file
+            count += 1
+    return count
+
 def main():
-    model = train_model(epochs = 30) #trains the model
+    savepath = "model_weights.pth"
+    model = train_model(epochs = 30, savepath=savepath) #trains the model
+    model.load_state_dict(torch.load(savepath)) #loads the best model weights from file
     test_model(model) #tests the trained model
     
-    # model = load_model("model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
+    # model = load_model(savepath) #uncomment this line to load a pre-trained model instead of training a new one
     # test_image_path = "images/megamillions/img3.jpg" #path to a test image
     # predict_image(model, test_image_path)
 
