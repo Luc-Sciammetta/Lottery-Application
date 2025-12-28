@@ -12,8 +12,8 @@ from torch.utils.data import Subset
 
 from PIL import Image
 
-train_ratio = 0.7
-validation_ratio = 0.15
+train_ratio = 0.65
+validation_ratio = 0.2
 test_ratio = 0.15
 
 #TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
@@ -32,27 +32,34 @@ test_transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-#make the train and test dataset objects
-train_dataset = ImageFolder(root = "images", transform=train_transform) 
-evaluation_dataset = ImageFolder(root="images", transform=test_transform)
 
-#determine the sizes of the train, validation, and test datasets
-data_size = len(train_dataset)
-train_size = int(train_ratio * data_size)
-validation_size = int(validation_ratio * data_size)
-test_size = data_size - train_size - validation_size
+# Create a single base dataset with a placeholder transform (e.g., test_transform as default)
+full_dataset = ImageFolder(root="images", transform=test_transform)
 
-#spit the dataset (indices) into training, validation, and testing sets
-train_indices, validation_indices, test_indices = random_split(range(data_size), [train_size, validation_size, test_size])
-#actually create the training, validation, and testing datasets using the indices from above
-train_dataset = Subset(train_dataset, train_indices)
-validation_dataset = Subset(evaluation_dataset, validation_indices)
-test_dataset = Subset(evaluation_dataset, test_indices)
+# Determine sizes and split the dataset object directly using random_split
+train_size = int(len(full_dataset) * train_ratio)
+validation_size = int(len(full_dataset) * validation_ratio)
+test_size = len(full_dataset) - train_size - validation_size
 
-#create the dataloaders for training and testing (they feed the data into the model in batches)
+train_subset, validation_subset, test_subset = random_split(
+    full_dataset, 
+    [train_size, validation_size, test_size]
+)
+
+def set_transform(subset, transform):
+    # Creates a new object that behaves like the subset but with a different transform
+    new_subset = Subset(subset.dataset, subset.indices)
+    new_subset.dataset.transform = transform
+    return new_subset
+
+# Apply the specific transform to the training data
+train_dataset = set_transform(train_subset, train_transform)
+# The validation_subset and test_subset already use the base test_transform
+
+# Create the dataloaders for training and testing (they feed the data into the model in batches)
 train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-validation_dataloader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
-test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False) #here we don't need to shuffle the test data
+validation_dataloader = DataLoader(validation_subset, batch_size=32, shuffle=False)
+test_dataloader = DataLoader(test_subset, batch_size=32, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
 
@@ -81,11 +88,11 @@ class SimpleCNN(nn.Module):
         #also done to make the model focus on the most important features
         self.pool = nn.MaxPool2d(2, 2)
 
-        self.dropout = nn.Dropout(p=0.5) #a dropout to prevent the model from overfitting
+        self.dropout = nn.Dropout(p=0.3) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
         #the nn nodes that make the final classification decision (kinda like a traditional neural network)
-        self.fc1 = nn.Linear(64 * 14 * 14, 128)
+        self.fc1 = nn.Linear(64 * 28 * 28, 128)
         self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -98,8 +105,6 @@ class SimpleCNN(nn.Module):
         x = self.pool(F.relu(self.conv1(x))) #apply conv1, then use the ReLU activation function, then apply pooling
         x = self.pool(F.relu(self.conv2(x))) 
         x = self.pool(F.relu(self.conv3(x))) 
-        x = self.pool(x) #apply pooling here to reduce the amount of input size for the NN layers
-
 
         x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x28x28, now 50176x1)
         x = F.relu(self.fc1(x)) #go through the first nn layer
@@ -126,12 +131,15 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
     
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.001, weight_decay=1e-4) #updates the model's weights and uses a learning rate (alpha) of 0.001
                                                                                     #weight_decay is used to prevent overfitting by penalizing model weights that are very large
+    l1_lambda = 1e-6 #regularization parameter for L1 regularization
 
     best_validation_loss = float('inf') #initialize the best validation loss to infinity
     num_epochs_no_improvement = 0 #counter for the number of epochs with no improvement
 
     num_epochs = epochs #number of times the model will go through the entire dataset
     for epoch in range(num_epochs):
+        model.train() #sets the model to training mode
+
         running_loss = 0.0 #this is the loss over all batches for this epoch
         correct = 0 #number of correct predictions
         total = 0 #total number of predictions
@@ -143,6 +151,13 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
             outputs = model(images) #feeds the batch images into the model to get the predictions
 
             loss = loss_function(outputs, labels) #calculates the loss between the predictions and the true labels
+
+            l1_norm = (
+                model.fc1.weight.abs().sum() +
+                model.fc2.weight.abs().sum()
+            ) #calculates the L1 norm of the weights of the fully connected layers
+            loss = loss + l1_lambda * l1_norm #adds the L1 regularization term to the loss
+
             loss.backward() #computes the gradients for the weights
             optimizer.step() #updates the weights based on the gradients
 
@@ -173,6 +188,7 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         val_accuracy = 100 * (correct / total)
+        val_loss /= len(validation_dataloader)
         print(f"Validation Loss: {val_loss:.3f}, Validation Accuracy: {val_accuracy:.2f}%")
 
         if val_loss < best_validation_loss:
@@ -238,8 +254,8 @@ def predict_image(model, image_path):
         output = model(img) #passes the image through the network
         predicted = output.argmax(dim = 1) #gets the index of the classification with the highest score
     
-    print(f"Predicted Class: {test_dataset.classes[predicted.item()]}")
-    return test_dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
+    print(f"Predicted Class: {train_dataset.dataset.classes[predicted.item()]}")
+    return train_dataset.dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
 
 def count_files_in_directory(directory):
     """ Count the number of files in a directory.
@@ -257,7 +273,7 @@ def count_files_in_directory(directory):
 
 def main():
     savepath = "model_weights.pth"
-    model = train_model(epochs = 30, savepath=savepath) #trains the model
+    model = train_model(epochs = 40, savepath=savepath) #trains the model
     model.load_state_dict(torch.load(savepath)) #loads the best model weights from file
     test_model(model) #tests the trained model
     
