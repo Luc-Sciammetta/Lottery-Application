@@ -1,0 +1,321 @@
+import os
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import random
+
+from torchvision import transforms
+from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader
+from torch.utils.data import random_split
+from torch.utils.data import Subset
+
+from PIL import Image
+
+train_ratio = 0.65
+validation_ratio = 0.2
+test_ratio = 0.15
+
+random_values = [0.1, 0.2, 0.3, 0.4]
+
+#TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
+train_transform = transforms.Compose([
+    transforms.Resize((224, 224)), #resizes each image to 224x224 pixels
+    transforms.RandomHorizontalFlip(), #randomly flips the image horizontally
+    transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
+    transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
+    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)), #randomly crops and resizes the image
+    transforms.ToTensor(), #converts the image to a PyTorch tensor
+    transforms.Normalize(
+        mean = [0.485, 0.456, 0.406], #normalizes the image tensor with mean and std values
+        std = [0.229, 0.224, 0.225]
+    )
+])
+
+#TEST IMAGES ONLY: same as above but without the random augmentations
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean = [0.485, 0.456, 0.406],
+        std = [0.229, 0.224, 0.225]
+    )
+])
+
+# Create a single base dataset with a placeholder transform (e.g., test_transform as default)
+full_dataset = ImageFolder(root="images", transform=test_transform)
+
+# Determine sizes and split the dataset object directly using random_split
+train_size = int(len(full_dataset) * train_ratio)
+validation_size = int(len(full_dataset) * validation_ratio)
+test_size = len(full_dataset) - train_size - validation_size
+
+#Split the dataset into training, validation, and test subsets
+train_subset, validation_subset, test_subset = random_split(
+    full_dataset, 
+    [train_size, validation_size, test_size]
+)
+
+#Here we create new Subset datasets that apply the correct transforms
+train_dataset = Subset(
+    ImageFolder(root="images", transform = train_transform),
+    train_subset.indices
+)
+validation_dataset = Subset(
+    ImageFolder(root="images", transform = test_transform),
+    validation_subset.indices
+)
+test_dataset = Subset(
+    ImageFolder(root="images", transform = test_transform),
+    test_subset.indices
+)
+
+# Create the dataloaders for training and testing (they feed the data into the model in batches)
+train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+validation_dataloader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
+test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
+
+class SimpleCNN(nn.Module):
+    """ A simple Convolutional Neural Network for image classification. 
+    Args:
+        num_classes (int): Number of output classes.
+
+    Returns:
+        torch.Tensor: The output class scores.
+    """
+
+    def __init__(self, num_classes = 4):
+        """ Initialize the CNN model. 
+        Args:
+            num_classes (int): Number of output classes.
+        """
+        super().__init__()
+
+        #convolutional layers that are used to extract 'features' from the images
+        self.conv1 = nn.Conv2d(3, 16, 3, padding=1) #3 input channels (RGB), 16 output channels, 3x3 kernel which a kernel is a filter that is slid over the image to produce the feature maps
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        
+        #pooling layer to reduce the spatial dimensions of the feature maps
+        #also done to make the model focus on the most important features
+        self.pool = nn.MaxPool2d(2, 2)
+
+        self.dropout = nn.Dropout(p=random_values[0]) #a dropout to prevent the model from overfitting
+                                         #it works by randomly setting some of the neurons to zero during training
+
+        #the nn nodes that make the final classification decision (kinda like a traditional neural network)
+        self.fc1 = nn.Linear(64 * 28 * 28, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+
+    def forward(self, x):
+        """ Define the forward pass of the CNN.
+        Args:
+            x (torch.Tensor): The input image tensor.
+        Returns:
+            torch.Tensor: The output class scores.
+        """
+        x = self.pool(F.relu(self.conv1(x))) #apply conv1, then use the ReLU activation function, then apply pooling
+        x = self.pool(F.relu(self.conv2(x))) 
+        x = self.pool(F.relu(self.conv3(x))) 
+
+        x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x28x28, now 50176x1)
+        x = F.relu(self.fc1(x)) #go through the first nn layer
+        x = self.dropout(x) #apply dropout
+        x = self.fc2(x) #go through the second nn layer to get the final output (which is the class scores)
+        return x
+
+def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
+    """ train the CNN model on the dataset.
+    Args:
+        epochs (int): Number of training epochs.
+        patience (int): Number of epochs to wait for improvement before stopping.
+        savepath (str): Path to save the trained model weights.
+    Returns:
+        SimpleCNN: The trained CNN model.
+    """
+    model = SimpleCNN().to(device) #sends the model to the device (GPU or CPU)
+
+    #calculate class weights to handle class image data counts imbalance
+    class_counts = torch.tensor([count_files_in_directory("images/powerball"), count_files_in_directory("images/euromillions"), count_files_in_directory("images/lottoamerica"), count_files_in_directory("images/megamillions")], dtype=torch.float)
+    weights = 1.0 / class_counts
+    weights = weights / weights.sum() * len(class_counts)
+    loss_function = nn.CrossEntropyLoss(weight=weights.to(device)) #loss function for multi-class classification problems
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr = random_values[1], weight_decay=random_values[2]) #updates the model's weights and uses a learning rate (alpha) of 0.001
+                                                                                    #weight_decay is used to prevent overfitting by penalizing model weights that are very large
+    l1_lambda = random_values[3] #regularization parameter for L1 regularization
+
+    best_validation_loss = float('inf') #initialize the best validation loss to infinity
+    num_epochs_no_improvement = 0 #counter for the number of epochs with no improvement
+
+    num_epochs = epochs #number of times the model will go through the entire dataset
+    for epoch in range(num_epochs):
+        model.train() #sets the model to training mode
+
+        running_loss = 0.0 #this is the loss over all batches for this epoch
+        correct = 0 #number of correct predictions
+        total = 0 #total number of predictions
+
+        for images, labels in train_dataloader: #gives batches of 32 images and their corresponding labels
+            images, labels = images.to(device), labels.to(device)  #does things with putting the images and model on GPU/CPU
+
+            optimizer.zero_grad() #clears old gradients from the previous batch
+            outputs = model(images) #feeds the batch images into the model to get the predictions
+
+            loss = loss_function(outputs, labels) #calculates the loss between the predictions and the true labels
+
+            l1_norm = (
+                model.fc1.weight.abs().sum() +
+                model.fc2.weight.abs().sum()
+            ) #calculates the L1 norm of the weights of the fully connected layers
+            loss = loss + l1_lambda * l1_norm #adds the L1 regularization term to the loss
+
+            loss.backward() #computes the gradients for the weights
+            optimizer.step() #updates the weights based on the gradients
+
+            running_loss += loss.item() #adds the loss for this batch to the running loss
+
+            _, predicted = torch.max(outputs.data, 1) 
+            total += labels.size(0) #updates the total number of predictions
+            correct += (predicted == labels).sum().item() #updates the number of correct predictions
+
+        accuracy = 100*(correct/total) #calculates the accuracy for this epoch
+        print(f"Training Epoch {epoch+1}, Loss: {running_loss:.3f}, Accuracy: {accuracy:.2f}%")
+
+        #validate the model on the validation dataset
+        model.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for images, labels in validation_dataloader:
+                images, labels = images.to(device), labels.to(device)
+
+                outputs = model(images)
+                loss = loss_function(outputs, labels)
+
+                val_loss += loss.item()
+
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        val_accuracy = 100 * (correct / total)
+        val_loss /= len(validation_dataloader)
+        print(f"Validation Loss: {val_loss:.3f}, Validation Accuracy: {val_accuracy:.2f}%")
+
+        if val_loss < best_validation_loss:
+            best_validation_loss = val_loss
+            num_epochs_no_improvement = 0
+            torch.save(model.state_dict(), savepath) #saves the model with the best weights to a file (so that we keep the best one and we have it if we need to stop)
+        else:
+            num_epochs_no_improvement += 1
+            if num_epochs_no_improvement >= patience:
+                print("Early stopping due to no improvement in validation loss.")
+                break
+
+        print()
+
+    #& torch.save(model.state_dict(), savepath) #saves the model weights to a file
+
+    return model
+
+def test_model(model):
+    """ Test the CNN model on the test dataset.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+    Returns:
+        float: The accuracy of the model on the test dataset.
+    """
+    model.eval() #sets the model to evaluation mode
+    correct = 0
+    total = 0
+
+    with torch.no_grad(): #tells PyTorch not to calculate gradients (saves memory and computations)
+        for images, labels in test_dataloader:
+            images, labels = images.to(device), labels.to(device) #does things with putting the images and model on GPU/CPU
+
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    accuracy = 100 * (correct / total)
+    print(f"Test Accuracy: {accuracy:.2f}%")
+
+    return accuracy
+
+def load_model(filepath):
+    """ Load the trained CNN model from a file.
+    Args:
+        filepath (str): The path to the file containing the model weights.
+    Returns:
+        SimpleCNN: The loaded CNN model.
+    """
+    model = SimpleCNN(num_classes=4)
+    model.load_state_dict(torch.load(filepath))
+    model.eval()
+    return model
+
+def predict_image(model, image_path):
+    """ Predict the class of a lottery ticket image.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+        image_path (str): The path to the image file.
+    Returns:
+        str: The predicted class name.
+    """
+    img = Image.open(image_path).convert("RGB") #opens the image and converts it to RGB format
+    img = test_transform(img).unsqueeze(0).to(device) #applies the transformations defined before
+
+    model.eval() #sets the model to evaluation mode
+    with torch.no_grad(): #tells PyTorch not to calculate gradients (saves memory and computations)
+        output = model(img) #passes the image through the network
+        predicted = output.argmax(dim = 1) #gets the index of the classification with the highest score
+    
+    print(f"Predicted Class: {train_dataset.dataset.classes[predicted.item()]}")
+    return train_dataset.dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
+
+def count_files_in_directory(directory):
+    """ Count the number of files in a directory.
+    Args:
+        directory (str): The path to the directory.
+    Returns:
+        int: The number of files in the directory.
+    """
+    count = 0
+    for entry in os.listdir(directory):
+        full_path = os.path.join(directory, entry) #get the full path of the entry (file)
+        if os.path.isfile(full_path): #check if this entry is a file
+            count += 1
+    return count
+
+def main():
+    global random_values
+    savepath = "model_weights.pth"
+
+    best_values = []
+    best_model_accuracy = 0.0
+
+    for i in range(50):
+        print(f"Trial {i+1}:")
+        random_values = [random.uniform(0.15, 0.50), random.uniform(0.0005, 0.005), random.uniform(0.000001, 0.001), random.uniform(0.000001, 0.0001)]
+        print(f"Training with values: Dropout={random_values[0]:.4f}, Learning Rate={random_values[1]:.6f}, Weight Decay={random_values[2]:.6f}, L1 Lambda={random_values[3]:.8f}")
+        print()
+
+        model = train_model(epochs = 30, savepath=savepath, patience=10) #trains the model
+        model.load_state_dict(torch.load(savepath)) #loads the best model weights from file
+        accuracy = test_model(model) #tests the trained model
+
+        torch.save(model.state_dict(), f"{accuracy:.2f}_{savepath}") #saves the model weights to a file
+
+        if accuracy > best_model_accuracy:
+            best_model_accuracy = accuracy
+            best_values = random_values
+
+    print(f"Best Values: Dropout={best_values[0]:.4f}, Learning Rate={best_values[1]:.6f}, Weight Decay={best_values[2]:.6f}, L1 Lambda={best_values[3]:.8f}")
+    print(f"Best Model Accuracy: {best_model_accuracy:.2f}%")
+
+main()

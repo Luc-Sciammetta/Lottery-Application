@@ -23,15 +23,22 @@ train_transform = transforms.Compose([
     transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
     transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
     transforms.RandomResizedCrop(224, scale=(0.8, 1.0)), #randomly crops and resizes the image
-    transforms.ToTensor() #converts the image to a PyTorch tensor
+    transforms.ToTensor(), #converts the image to a PyTorch tensor
+    transforms.Normalize(
+        mean = [0.485, 0.456, 0.406], #normalizes the image tensor with mean and std values
+        std = [0.229, 0.224, 0.225]
+    )
 ])
 
 #TEST IMAGES ONLY: same as above but without the random augmentations
 test_transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean = [0.485, 0.456, 0.406],
+        std = [0.229, 0.224, 0.225]
+    )
 ])
-
 
 # Create a single base dataset with a placeholder transform (e.g., test_transform as default)
 full_dataset = ImageFolder(root="images", transform=test_transform)
@@ -41,25 +48,30 @@ train_size = int(len(full_dataset) * train_ratio)
 validation_size = int(len(full_dataset) * validation_ratio)
 test_size = len(full_dataset) - train_size - validation_size
 
+#Split the dataset into training, validation, and test subsets
 train_subset, validation_subset, test_subset = random_split(
     full_dataset, 
     [train_size, validation_size, test_size]
 )
 
-def set_transform(subset, transform):
-    # Creates a new object that behaves like the subset but with a different transform
-    new_subset = Subset(subset.dataset, subset.indices)
-    new_subset.dataset.transform = transform
-    return new_subset
-
-# Apply the specific transform to the training data
-train_dataset = set_transform(train_subset, train_transform)
-# The validation_subset and test_subset already use the base test_transform
+#Here we create new Subset datasets that apply the correct transforms
+train_dataset = Subset(
+    ImageFolder(root="images", transform = train_transform),
+    train_subset.indices
+)
+validation_dataset = Subset(
+    ImageFolder(root="images", transform = test_transform),
+    validation_subset.indices
+)
+test_dataset = Subset(
+    ImageFolder(root="images", transform = test_transform),
+    test_subset.indices
+)
 
 # Create the dataloaders for training and testing (they feed the data into the model in batches)
 train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-validation_dataloader = DataLoader(validation_subset, batch_size=32, shuffle=False)
-test_dataloader = DataLoader(test_subset, batch_size=32, shuffle=False)
+validation_dataloader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
+test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
 
@@ -131,7 +143,7 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
     
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.001, weight_decay=1e-4) #updates the model's weights and uses a learning rate (alpha) of 0.001
                                                                                     #weight_decay is used to prevent overfitting by penalizing model weights that are very large
-    l1_lambda = 1e-6 #regularization parameter for L1 regularization
+    l1_lambda = 1e-5 #regularization parameter for L1 regularization
 
     best_validation_loss = float('inf') #initialize the best validation loss to infinity
     num_epochs_no_improvement = 0 #counter for the number of epochs with no improvement
@@ -201,7 +213,9 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
                 print("Early stopping due to no improvement in validation loss.")
                 break
 
-    torch.save(model.state_dict(), savepath) #saves the model weights to a file
+        print()
+
+    #& torch.save(model.state_dict(), savepath) #saves the model weights to a file
 
     return model
 
@@ -209,6 +223,8 @@ def test_model(model):
     """ Test the CNN model on the test dataset.
     Args:
         model (SimpleCNN): The trained CNN model.
+    Returns:
+        float: The accuracy of the model on the test dataset.
     """
     model.eval() #sets the model to evaluation mode
     correct = 0
@@ -225,6 +241,8 @@ def test_model(model):
 
     accuracy = 100 * (correct / total)
     print(f"Test Accuracy: {accuracy:.2f}%")
+
+    return accuracy
 
 def load_model(filepath):
     """ Load the trained CNN model from a file.
@@ -273,12 +291,14 @@ def count_files_in_directory(directory):
 
 def main():
     savepath = "model_weights.pth"
-    model = train_model(epochs = 40, savepath=savepath) #trains the model
+    model = train_model(epochs = 30, savepath=savepath, patience=10) #trains the model
     model.load_state_dict(torch.load(savepath)) #loads the best model weights from file
-    test_model(model) #tests the trained model
-    
+    accuracy = test_model(model) #tests the trained model
+
+    torch.save(model.state_dict(), f"{accuracy:.2f}_{savepath}") #saves the model weights to a file
+
     # model = load_model(savepath) #uncomment this line to load a pre-trained model instead of training a new one
-    # test_image_path = "images/megamillions/img3.jpg" #path to a test image
+    # test_image_path = "images/megamillions/img30.jpg" #path to a test image
     # predict_image(model, test_image_path)
 
 main()
