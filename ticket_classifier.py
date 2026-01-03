@@ -100,7 +100,7 @@ class SimpleCNN(nn.Module):
         #also done to make the model focus on the most important features
         self.pool = nn.MaxPool2d(2, 2)
 
-        self.dropout = nn.Dropout(p=0.3) #a dropout to prevent the model from overfitting
+        self.dropout = nn.Dropout(p=0.2) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
         #the nn nodes that make the final classification decision (kinda like a traditional neural network)
@@ -206,7 +206,10 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
         if val_loss < best_validation_loss:
             best_validation_loss = val_loss
             num_epochs_no_improvement = 0
-            torch.save(model.state_dict(), savepath) #saves the model with the best weights to a file (so that we keep the best one and we have it if we need to stop)
+
+            #! I have not included the loss because i dont want my computer to run out of storage holding many various model weights
+            torch.save(model.state_dict(), f"ticket_classifier_models/validation_models/{savepath}") #saves the model with the best weights to a file (so that we keep the best one and we have it if we need to stop)
+            # torch.save(model.state_dict(), f"ticket_classifier_models/validation_models/{val_loss:.2f}_{savepath}") #saves the model with the best weights to a file (so that we keep the best one and we have it if we need to stop)
         else:
             num_epochs_no_improvement += 1
             if num_epochs_no_improvement >= patience:
@@ -215,7 +218,7 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
 
         print()
 
-    #& torch.save(model.state_dict(), savepath) #saves the model weights to a file
+    #& torch.save(model.state_dict(), f"ticket_classifier_models/{savepath}") #saves the model weights to a file
 
     return model
 
@@ -291,14 +294,28 @@ def count_files_in_directory(directory):
 
 def main():
     savepath = "model_weights.pth"
-    model = train_model(epochs = 30, savepath=savepath, patience=10) #trains the model
-    model.load_state_dict(torch.load(savepath)) #loads the best model weights from file
+
+    model = train_model(epochs = 30, savepath=savepath, patience=7) #trains the model
+
+    model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+    
     accuracy = test_model(model) #tests the trained model
+    print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    torch.save(model.state_dict(), f"{accuracy:.2f}_{savepath}") #saves the model weights to a file
+    torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
-    # model = load_model(savepath) #uncomment this line to load a pre-trained model instead of training a new one
-    # test_image_path = "images/megamillions/img30.jpg" #path to a test image
+
+    # model = load_model("ticket_classifier_models/68maybe_model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
+    # accuracy = test_model(model) #tests the trained model
+
+    # accuracy_avg = 0.0
+    # num_tests = 10
+    # for _ in range(num_tests):
+    #     accuracy_avg += test_model(model)
+    # accuracy_avg /= num_tests
+    # print(f"Average Test Accuracy over {num_tests} runs: {accuracy_avg:.2f}%")
+
+    # test_image_path = "images/megamillions/img10.jpg" #path to a test image
     # predict_image(model, test_image_path)
 
 main()

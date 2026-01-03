@@ -15,8 +15,11 @@ This will be done using image recognition techniques to determine lottery ticket
   - Mega Millions
   - Lotto America
   - EuroMillions
+- A realtively (58% test accuracy) accurate ticket classifier using PyTorch to identify lottery ticket types from images.
 
 ## Things to add
-- Image recognition for lottery tickets and number extraction.
+- A better ticket classifier with higher accuracy.
+- A number extractor using OCR (Optical Character Recognition) to read numbers from ticket images.
 - User interface for easier interaction.
+- Support for more lottery games
 

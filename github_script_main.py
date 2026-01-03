@@ -1,3 +1,5 @@
+#this is for the old way of getting lottery data (from dowload_data.py)
+
 import pandas as pd
 
 import abstract_funcs
