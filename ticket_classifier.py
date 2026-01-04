@@ -18,11 +18,12 @@ test_ratio = 0.15
 
 #TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
 train_transform = transforms.Compose([
-    transforms.Resize((224, 224)), #resizes each image to 224x224 pixels
-    transforms.RandomHorizontalFlip(), #randomly flips the image horizontally
-    transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
-    transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
-    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)), #randomly crops and resizes the image
+    transforms.Resize((112, 112)), #resizes each image to 224x224 pixels
+    transforms.RandomHorizontalFlip(p=0.5), #randomly flips the image horizontally
+    # transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
+    # transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
+    # transforms.RandomResizedCrop(112, scale=(0.8, 1.0)), #randomly crops and resizes the image
+    transforms.RandomPerspective(distortion_scale=0.1, p=0.3), #randomly applies perspective transformation
     transforms.ToTensor(), #converts the image to a PyTorch tensor
     transforms.Normalize(
         mean = [0.485, 0.456, 0.406], #normalizes the image tensor with mean and std values
@@ -32,7 +33,7 @@ train_transform = transforms.Compose([
 
 #TEST IMAGES ONLY: same as above but without the random augmentations
 test_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((112, 112)),
     transforms.ToTensor(),
     transforms.Normalize(
         mean = [0.485, 0.456, 0.406],
@@ -49,9 +50,11 @@ validation_size = int(len(full_dataset) * validation_ratio)
 test_size = len(full_dataset) - train_size - validation_size
 
 #Split the dataset into training, validation, and test subsets
+generator = torch.Generator().manual_seed(42)  #for reproducibility
 train_subset, validation_subset, test_subset = random_split(
     full_dataset, 
-    [train_size, validation_size, test_size]
+    [train_size, validation_size, test_size],
+    generator=generator
 )
 
 #Here we create new Subset datasets that apply the correct transforms
@@ -92,19 +95,18 @@ class SimpleCNN(nn.Module):
         super().__init__()
 
         #convolutional layers that are used to extract 'features' from the images
-        self.conv1 = nn.Conv2d(3, 16, 3, padding=1) #3 input channels (RGB), 16 output channels, 3x3 kernel which a kernel is a filter that is slid over the image to produce the feature maps
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        
-        #pooling layer to reduce the spatial dimensions of the feature maps
-        #also done to make the model focus on the most important features
-        self.pool = nn.MaxPool2d(2, 2)
+        self.conv1 = nn.Conv2d(3, 8, 3, padding=1) #3 input channels (RGB), 16 output channels, 3x3 kernel which a kernel is a filter that is slid over the image to produce the feature maps
+        self.conv2 = nn.Conv2d(8, 16, 3, padding=1)
+        self.conv3 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv4 = nn.Conv2d(32, 64, 3, padding=1)
 
-        self.dropout = nn.Dropout(p=0.2) #a dropout to prevent the model from overfitting
+        self.pool = nn.MaxPool2d(2, 2) #pooling layer to reduce the spatial dimensions of the feature maps
+                                       #also done to make the model focus on the most important features
+        self.gap = nn.AdaptiveAvgPool2d((4, 4))  #global average pooling layer to reduce the spatial dimensions to 4x4
+        self.dropout = nn.Dropout(p=0.4) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
-        #the nn nodes that make the final classification decision (kinda like a traditional neural network)
-        self.fc1 = nn.Linear(64 * 28 * 28, 128)
+        self.fc1 = nn.Linear(64 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
         self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -115,10 +117,12 @@ class SimpleCNN(nn.Module):
             torch.Tensor: The output class scores.
         """
         x = self.pool(F.relu(self.conv1(x))) #apply conv1, then use the ReLU activation function, then apply pooling
-        x = self.pool(F.relu(self.conv2(x))) 
-        x = self.pool(F.relu(self.conv3(x))) 
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = self.pool(F.relu(self.conv4(x)))
 
-        x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x28x28, now 50176x1)
+        x = self.gap(x) #apply global average pooling
+        x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x4x4, now 1024x1)
         x = F.relu(self.fc1(x)) #go through the first nn layer
         x = self.dropout(x) #apply dropout
         x = self.fc2(x) #go through the second nn layer to get the final output (which is the class scores)
@@ -139,11 +143,12 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
     class_counts = torch.tensor([count_files_in_directory("images/powerball"), count_files_in_directory("images/euromillions"), count_files_in_directory("images/lottoamerica"), count_files_in_directory("images/megamillions")], dtype=torch.float)
     weights = 1.0 / class_counts
     weights = weights / weights.sum() * len(class_counts)
-    loss_function = nn.CrossEntropyLoss(weight=weights.to(device)) #loss function for multi-class classification problems
-    
+    loss_function = nn.CrossEntropyLoss(weight=weights.to(device), label_smoothing=0.05) #loss function for multi-class classification problems
+                                                                                         #label_smoothing is used to prevent the model from becoming too confident in its predictions, which can help improve generalization
+
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.001, weight_decay=1e-4) #updates the model's weights and uses a learning rate (alpha) of 0.001
                                                                                     #weight_decay is used to prevent overfitting by penalizing model weights that are very large
-    l1_lambda = 1e-5 #regularization parameter for L1 regularization
+    l1_lambda = 0.0 #regularization parameter for L1 regularization (WAS 1e-6)
 
     best_validation_loss = float('inf') #initialize the best validation loss to infinity
     num_epochs_no_improvement = 0 #counter for the number of epochs with no improvement
@@ -164,10 +169,8 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
 
             loss = loss_function(outputs, labels) #calculates the loss between the predictions and the true labels
 
-            l1_norm = (
-                model.fc1.weight.abs().sum() +
-                model.fc2.weight.abs().sum()
-            ) #calculates the L1 norm of the weights of the fully connected layers
+            l1_norm = model.fc1.weight.abs().sum() #calculates the L1 norm of the weights of the first fully connected layer
+
             loss = loss + l1_lambda * l1_norm #adds the L1 regularization term to the loss
 
             loss.backward() #computes the gradients for the weights
@@ -222,6 +225,32 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
 
     return model
 
+def load_model(filepath):
+    """ Load the trained CNN model from a file.
+    Args:
+        filepath (str): The path to the file containing the model weights.
+    Returns:
+        SimpleCNN: The loaded CNN model.
+    """
+    model = SimpleCNN(num_classes=4)
+    model.load_state_dict(torch.load(filepath))
+    model.eval()
+    return model
+
+def count_files_in_directory(directory):
+    """ Count the number of files in a directory.
+    Args:
+        directory (str): The path to the directory.
+    Returns:
+        int: The number of files in the directory.
+    """
+    count = 0
+    for entry in os.listdir(directory):
+        full_path = os.path.join(directory, entry) #get the full path of the entry (file)
+        if os.path.isfile(full_path): #check if this entry is a file
+            count += 1
+    return count
+
 def test_model(model):
     """ Test the CNN model on the test dataset.
     Args:
@@ -247,75 +276,19 @@ def test_model(model):
 
     return accuracy
 
-def load_model(filepath):
-    """ Load the trained CNN model from a file.
-    Args:
-        filepath (str): The path to the file containing the model weights.
-    Returns:
-        SimpleCNN: The loaded CNN model.
-    """
-    model = SimpleCNN(num_classes=4)
-    model.load_state_dict(torch.load(filepath))
-    model.eval()
-    return model
-
-def predict_image(model, image_path):
-    """ Predict the class of a lottery ticket image.
-    Args:
-        model (SimpleCNN): The trained CNN model.
-        image_path (str): The path to the image file.
-    Returns:
-        str: The predicted class name.
-    """
-    img = Image.open(image_path).convert("RGB") #opens the image and converts it to RGB format
-    img = test_transform(img).unsqueeze(0).to(device) #applies the transformations defined before
-
-    model.eval() #sets the model to evaluation mode
-    with torch.no_grad(): #tells PyTorch not to calculate gradients (saves memory and computations)
-        output = model(img) #passes the image through the network
-        predicted = output.argmax(dim = 1) #gets the index of the classification with the highest score
-    
-    print(f"Predicted Class: {train_dataset.dataset.classes[predicted.item()]}")
-    return train_dataset.dataset.classes[predicted.item()] #returns the class name corresponding to the predicted index
-
-def count_files_in_directory(directory):
-    """ Count the number of files in a directory.
-    Args:
-        directory (str): The path to the directory.
-    Returns:
-        int: The number of files in the directory.
-    """
-    count = 0
-    for entry in os.listdir(directory):
-        full_path = os.path.join(directory, entry) #get the full path of the entry (file)
-        if os.path.isfile(full_path): #check if this entry is a file
-            count += 1
-    return count
-
 def main():
-    savepath = "model_weights.pth"
+    for i in range(100):
+        print(f" ----- Training Run {i+1} ----- ")
+        savepath = "model_weights.pth"
 
-    model = train_model(epochs = 30, savepath=savepath, patience=7) #trains the model
+        model = train_model(epochs = 50, savepath=savepath, patience=30) #trains the model
 
-    model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
-    
-    accuracy = test_model(model) #tests the trained model
-    print(f"Model Test Accuracy: {accuracy:.2f}%")
+        model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+        
+        accuracy = test_model(model) #tests the trained model
+        print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+        torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
-
-    # model = load_model("ticket_classifier_models/68maybe_model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
-    # accuracy = test_model(model) #tests the trained model
-
-    # accuracy_avg = 0.0
-    # num_tests = 10
-    # for _ in range(num_tests):
-    #     accuracy_avg += test_model(model)
-    # accuracy_avg /= num_tests
-    # print(f"Average Test Accuracy over {num_tests} runs: {accuracy_avg:.2f}%")
-
-    # test_image_path = "images/megamillions/img10.jpg" #path to a test image
-    # predict_image(model, test_image_path)
-
-main()
+if __name__ == "__main__":
+    main()
