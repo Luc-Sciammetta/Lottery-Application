@@ -111,7 +111,7 @@ def predict_image(model, image_path):
 
     return class_names[pred_idx]
 
-def classify_all_images(model, image_root="images"):
+def classify_all_images(model, image_root="images", test_logos=False):
     """
     Classify all images and print overall accuracy.
     Args:
@@ -130,18 +130,25 @@ def classify_all_images(model, image_root="images"):
     total = 0
 
     with torch.no_grad():
-        for img, label in dataset:
-            img = img.unsqueeze(0).to(device)  # tensor → device
+        for idx, (img, label) in enumerate(dataset):
+            img_path = dataset.samples[idx][0]
+
+            # Skip images containing "logo" (case-insensitive)
+            if "logo" in os.path.basename(img_path).lower() and not test_logos:
+                continue
+
+            img = img.unsqueeze(0).to(device)
 
             output = model(img)
             probs = torch.softmax(output, dim=1)
-            pred = probs.argmax(dim=1).item()  # tensor → int
+            pred = probs.argmax(dim=1).item()
 
             is_correct = pred == label
             correct += int(is_correct)
             total += 1
 
             print(
+                f"Image: {img_path} | "
                 f"True: {class_names[label]} | "
                 f"Predicted: {class_names[pred]} | "
                 f"Conf: {probs[0][pred].item():.2f} | "
@@ -156,8 +163,8 @@ def classify_all_images(model, image_root="images"):
     return accuracy
 
 def main():
-    model = load_model("ticket_classifier_models/best_model_so_far.pth") #load a pre-trained model
-    # classify_all_images(model)
+    model = load_model("ticket_classifier_models/newnewnewnew_best.pth") #load a pre-trained model
+    classify_all_images(model, test_logos=False) #classify all images in the dataset
 
     predict_image(model, "images/euromillions/img12.jpeg") #path to a test image
 

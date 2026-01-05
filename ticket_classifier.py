@@ -20,7 +20,7 @@ test_ratio = 0.15
 train_transform = transforms.Compose([
     transforms.Resize((112, 112)), #resizes each image to 224x224 pixels
     transforms.RandomHorizontalFlip(p=0.5), #randomly flips the image horizontally
-    # transforms.RandomRotation(15), #randomly rotates the image by up to 15 degrees
+    # transforms.RandomRotation(8), #randomly rotates the image by up to 15 degrees
     # transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
     # transforms.RandomResizedCrop(112, scale=(0.8, 1.0)), #randomly crops and resizes the image
     transforms.RandomPerspective(distortion_scale=0.1, p=0.3), #randomly applies perspective transformation
@@ -99,6 +99,9 @@ class SimpleCNN(nn.Module):
         self.conv2 = nn.Conv2d(8, 16, 3, padding=1)
         self.conv3 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv4 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv5 = nn.Conv2d(64, 128, 3, padding=1)
+        self.conv6 = nn.Conv2d(128, 256, 3, padding=1)
+
 
         self.pool = nn.MaxPool2d(2, 2) #pooling layer to reduce the spatial dimensions of the feature maps
                                        #also done to make the model focus on the most important features
@@ -106,7 +109,7 @@ class SimpleCNN(nn.Module):
         self.dropout = nn.Dropout(p=0.4) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
-        self.fc1 = nn.Linear(64 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
+        self.fc1 = nn.Linear(256 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
         self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -120,11 +123,16 @@ class SimpleCNN(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
         x = self.pool(F.relu(self.conv4(x)))
+        x = self.pool(F.relu(self.conv5(x)))
+        x = self.pool(F.relu(self.conv6(x)))
 
         x = self.gap(x) #apply global average pooling
+        
         x = x.view(x.size(0), -1) #flatten the tensor into a 1D vector (was 64x4x4, now 1024x1)
+       
         x = F.relu(self.fc1(x)) #go through the first nn layer
         x = self.dropout(x) #apply dropout
+       
         x = self.fc2(x) #go through the second nn layer to get the final output (which is the class scores)
         return x
 
@@ -277,18 +285,30 @@ def test_model(model):
     return accuracy
 
 def main():
-    for i in range(100):
-        print(f" ----- Training Run {i+1} ----- ")
-        savepath = "model_weights.pth"
+    savepath = "model_weights.pth"
 
-        model = train_model(epochs = 50, savepath=savepath, patience=30) #trains the model
+    model = train_model(epochs = 50, savepath=savepath, patience=10) #trains the model
 
-        model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+    model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         
-        accuracy = test_model(model) #tests the trained model
-        print(f"Model Test Accuracy: {accuracy:.2f}%")
+    accuracy = test_model(model) #tests the trained model
+    print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-        torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+    torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+
+
+    # for i in range(100):
+    #     print(f" ----- Training Run {i+1} ----- ")
+    #     savepath = "model_weights.pth"
+
+    #     model = train_model(epochs = 50, savepath=savepath, patience=30) #trains the model
+
+    #     model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+        
+    #     accuracy = test_model(model) #tests the trained model
+    #     print(f"Model Test Accuracy: {accuracy:.2f}%")
+
+    #     torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 if __name__ == "__main__":
     main()
