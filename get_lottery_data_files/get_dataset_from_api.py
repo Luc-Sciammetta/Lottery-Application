@@ -23,7 +23,7 @@ paths = {
     }
 
 headers = {
-    "x-api-key": "U8vG23158u5NskmeIdDQE99gK9x3MLBiaetrZytG"
+    "x-api-key": "IImNy8qC9d9YxEY22bcsW9jUvhPCYQqh9dSsZI8C"
 }
 
 features = {
@@ -81,7 +81,7 @@ def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
 
     df = df.iloc[::-1].reset_index(drop=True)
 
-    df.to_csv(f"{game}.csv", index=False)
+    df.to_csv(f"lottery_data/{game}.csv", index=False)
     print(df)
 
     return df
@@ -93,12 +93,15 @@ def get_dataset(game):
     Returns:
         pd.DataFrame: The dataset as a DataFrame.
     """
-    df = pd.read_csv(f"{game}.csv")
+    df = pd.read_csv(f"lottery_data/{game}.csv")
     df['drawing_date'] = pd.to_datetime(df['drawing_date'])
     return df
 
 def main():
-    make_dataset("lottery_data/powerball")
+    make_dataset("powerball")
+    make_dataset("megamillions")
+    make_dataset("euromillions")
+    make_dataset("lottoamerica")
     # print(get_dataset("powerball"))
 
 main()
