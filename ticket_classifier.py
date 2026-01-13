@@ -285,30 +285,30 @@ def test_model(model):
     return accuracy
 
 def main():
-    savepath = "model_weights.pth"
+    # savepath = "model_weights.pth"
 
-    model = train_model(epochs = 50, savepath=savepath, patience=10) #trains the model
+    # model = train_model(epochs = 50, savepath=savepath, patience=10) #trains the model
 
-    model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+    # model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         
-    accuracy = test_model(model) #tests the trained model
-    print(f"Model Test Accuracy: {accuracy:.2f}%")
+    # accuracy = test_model(model) #tests the trained model
+    # print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+    # torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 
-    # for i in range(100):
-    #     print(f" ----- Training Run {i+1} ----- ")
-    #     savepath = "model_weights.pth"
+    for i in range(100):
+        print(f" ----- Training Run {i+1} ----- ")
+        savepath = "model_weights.pth"
 
-    #     model = train_model(epochs = 50, savepath=savepath, patience=30) #trains the model
+        model = train_model(epochs = 55, savepath=savepath, patience=15) #trains the model
 
-    #     model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+        model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         
-    #     accuracy = test_model(model) #tests the trained model
-    #     print(f"Model Test Accuracy: {accuracy:.2f}%")
+        accuracy = test_model(model) #tests the trained model
+        print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    #     torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+        torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 if __name__ == "__main__":
     main()
