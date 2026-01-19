@@ -163,7 +163,7 @@ def classify_all_images(model, image_root="images", test_logos=False):
     return accuracy
 
 def main():
-    model = load_model("ticket_classifier_models/even_better_model.pth") #load a pre-trained model
+    model = load_model("ticket_classifier_models/new_best_model.pth") #load a pre-trained model
     classify_all_images(model, test_logos=False) #classify all images in the dataset
 
     predict_image(model, "images/euromillions/img31.jpg") #path to a test image

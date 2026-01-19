@@ -18,9 +18,9 @@ test_ratio = 0.15
 
 #TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
 train_transform = transforms.Compose([
-    transforms.Resize((160, 160)), #resizes each image to 224x224 pixels
+    transforms.Resize((112, 112)), #resizes each image to 112x112 pixels
     transforms.RandomHorizontalFlip(p=0.5), #randomly flips the image horizontally
-    # transforms.RandomRotation(8), #randomly rotates the image by up to 15 degrees
+    transforms.RandomRotation(5), 
     # transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
     # transforms.RandomResizedCrop(112, scale=(0.8, 1.0)), #randomly crops and resizes the image
     transforms.RandomPerspective(distortion_scale=0.1, p=0.3), #randomly applies perspective transformation
@@ -33,7 +33,7 @@ train_transform = transforms.Compose([
 
 #TEST IMAGES ONLY: same as above but without the random augmentations
 test_transform = transforms.Compose([
-    transforms.Resize((160, 160)),
+    transforms.Resize((112, 112)),
     transforms.ToTensor(),
     transforms.Normalize(
         mean = [0.485, 0.456, 0.406],
@@ -287,27 +287,27 @@ def test_model(model):
 def main():
     savepath = "model_weights.pth"
 
-    model = train_model(epochs = 50, savepath=savepath, patience=20) #trains the model
+    # model = train_model(epochs = 50, savepath=savepath, patience=15) #trains the model
 
-    model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+    # model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         
-    accuracy = test_model(model) #tests the trained model
-    print(f"Model Test Accuracy: {accuracy:.2f}%")
+    # accuracy = test_model(model) #tests the trained model
+    # print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+    # torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
-    # for i in range(100):
-    #     print(f" ----- Training Run {i+1} ----- ")
-    #     savepath = "model_weights.pth"
+    for i in range(20):
+        print(f" ----- Training Run {i+1} ----- ")
+        savepath = "model_weights.pth"
 
-    #     model = train_model(epochs = 55, savepath=savepath, patience=15) #trains the model
+        model = train_model(epochs = 55, savepath=savepath, patience=15) #trains the model
 
-    #     model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
+        model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         
-    #     accuracy = test_model(model) #tests the trained model
-    #     print(f"Model Test Accuracy: {accuracy:.2f}%")
+        accuracy = test_model(model) #tests the trained model
+        print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-    #     torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+        torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 if __name__ == "__main__":
     main()
