@@ -23,7 +23,7 @@ paths = {
     }
 
 headers = {
-    "x-api-key": "l2XOol7WlbDT3IDVbwr84zaL5oC0LTx3W1RQ4XPh" 
+    "x-api-key": "API_KEY" 
 }
 
 features = {
