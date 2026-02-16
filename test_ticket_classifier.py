@@ -12,7 +12,7 @@ from torch.utils.data import Subset
 
 from PIL import Image
 
-from ticket_classifier import SimpleCNN, load_model
+from ticket_classifier import SimpleCNN, load_model, predict_image
 
 train_ratio = 0.65
 validation_ratio = 0.2
@@ -80,37 +80,6 @@ test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #checks to see if there is a GPU that is available for training, otherwise uses the CPU of the computer
 
-def predict_image(model, image_path):
-    """ Predict the class of a lottery ticket image and print all class confidences.
-    Args:
-        model (SimpleCNN): The trained CNN model.
-        image_path (str): The path to the image file.
-    Returns:
-        str: The predicted class name.
-    """
-    img = Image.open(image_path).convert("RGB")
-    img = test_transform(img).unsqueeze(0).to(device)
-
-    model.eval()
-    with torch.no_grad():
-        output = model(img)
-        probs = torch.softmax(output, dim=1).squeeze(0)  # shape: [num_classes]
-
-    class_names = train_dataset.dataset.classes
-    pred_idx = probs.argmax().item()
-
-    print(f"\nImage: {image_path}")
-    print("Class confidences:")
-
-    for i, class_name in enumerate(class_names):
-        print(
-            f"  {class_name:<15}: {probs[i].item() * 100:.2f}%"
-        )
-
-    print(f"\nPredicted Class: {class_names[pred_idx]}")
-
-    return class_names[pred_idx]
-
 def classify_all_images(model, image_root="images", test_logos=False):
     """
     Classify all images and print overall accuracy.
@@ -163,10 +132,10 @@ def classify_all_images(model, image_root="images", test_logos=False):
     return accuracy
 
 def main():
-    model = load_model("ticket_classifier_models/new_best_model.pth") #load a pre-trained model
+    model = load_model("ticket_classifier_models/89.10_model_weights.pth") #load a pre-trained model
     classify_all_images(model, test_logos=False) #classify all images in the dataset
 
-    predict_image(model, "images/euromillions/img31.jpg") #path to a test image
+    predict_image(model, "images/powerball/IMG_3348.jpeg") #path to a test image
 
     # model = load_model("ticket_classifier_models/37.50_model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
     # accuracy = test_model(model) #tests the trained model

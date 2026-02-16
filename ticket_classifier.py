@@ -10,11 +10,15 @@ from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 from torch.utils.data import Subset
 
+import random
+
 from PIL import Image
 
-train_ratio = 0.65
+from read_text.read_image_tesseract import read_image
+
+train_ratio = 0.7
 validation_ratio = 0.2
-test_ratio = 0.15
+test_ratio = 0.1
 
 #TRAIN IMAGES ONLY: defines the image transformations that will be applied to each image in the dataset
 train_transform = transforms.Compose([
@@ -102,11 +106,10 @@ class SimpleCNN(nn.Module):
         self.conv5 = nn.Conv2d(64, 128, 3, padding=1)
         self.conv6 = nn.Conv2d(128, 256, 3, padding=1)
 
-
         self.pool = nn.MaxPool2d(2, 2) #pooling layer to reduce the spatial dimensions of the feature maps
                                        #also done to make the model focus on the most important features
         self.gap = nn.AdaptiveAvgPool2d((4, 4))  #global average pooling layer to reduce the spatial dimensions to 4x4
-        self.dropout = nn.Dropout(p=0.4) #a dropout to prevent the model from overfitting
+        self.dropout = nn.Dropout(p=random.uniform(0.37, 0.405)) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
         self.fc1 = nn.Linear(256 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
@@ -284,30 +287,106 @@ def test_model(model):
 
     return accuracy
 
+def predict_image(model, image_path):
+    """ Predict the class of a lottery ticket image and print all class confidences.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+        image_path (str): The path to the image file.
+    Returns:
+        str: The predicted class name.
+    """
+    img = Image.open(image_path).convert("RGB")
+    img = test_transform(img).unsqueeze(0).to(device)
+
+    model.eval()
+    with torch.no_grad():
+        output = model(img)
+        probs = torch.softmax(output, dim=1).squeeze(0)  # shape: [num_classes]
+
+    class_names = train_dataset.dataset.classes
+    pred_idx = probs.argmax().item()
+
+    print(f"\nImage: {image_path}")
+    print("Class confidences:")
+
+    for i, class_name in enumerate(class_names):
+        print(
+            f"  {class_name:<15}: {probs[i].item() * 100:.2f}%"
+        )
+
+    print(f"\nPredicted Class: {class_names[pred_idx]}")
+
+    return class_names[pred_idx]
+
+#!--------------- REMOVE THIS LATER -----------------
+def classify_all_images(model, image_root="images", test_logos=False):
+    """
+    Classify all images and print overall accuracy.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+        image_root (str): The root directory containing images.
+    Returns:
+        float: The overall accuracy percentage.
+    """
+    model.to(device)
+    model.eval()
+
+    dataset = ImageFolder(root=image_root, transform=test_transform)
+    class_names = dataset.classes
+
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for idx, (img, label) in enumerate(dataset):
+            img_path = dataset.samples[idx][0]
+
+            # Skip images containing "logo" (case-insensitive)
+            if "logo" in os.path.basename(img_path).lower() and not test_logos:
+                continue
+
+            img = img.unsqueeze(0).to(device)
+
+            output = model(img)
+            probs = torch.softmax(output, dim=1)
+            pred = probs.argmax(dim=1).item()
+
+            is_correct = pred == label
+            correct += int(is_correct)
+            total += 1
+
+            # print(
+            #     f"Image: {img_path} | "
+            #     f"True: {class_names[label]} | "
+            #     f"Predicted: {class_names[pred]} | "
+            #     f"Conf: {probs[0][pred].item():.2f} | "
+            #     f"{'✓' if is_correct else '✗'}"
+            # )
+
+    accuracy = 100 * correct / total
+    print("\n-----------------------------------")
+    print(f"Overall Accuracy: {accuracy:.2f}% ({correct}/{total})")
+    print("-----------------------------------")
+
+    return accuracy
+#!--------------- END REMOVE THIS LATER -----------------
+
 def main():
     savepath = "model_weights.pth"
 
-    # model = train_model(epochs = 50, savepath=savepath, patience=15) #trains the model
-
-    # model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
-        
-    # accuracy = test_model(model) #tests the trained model
-    # print(f"Model Test Accuracy: {accuracy:.2f}%")
-
-    # torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
-
-    for i in range(20):
+    for i in range(50):
         print(f" ----- Training Run {i+1} ----- ")
         savepath = "model_weights.pth"
 
-        model = train_model(epochs = 55, savepath=savepath, patience=15) #trains the model
+        model = train_model(epochs = 75, savepath=savepath, patience=50) #trains the model
 
         model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
-        
+        print("Model Dropout Value: ", model.dropout.p)
         accuracy = test_model(model) #tests the trained model
-        print(f"Model Test Accuracy: {accuracy:.2f}%")
 
-        torch.save(model.state_dict(), f"ticket_classifier_models/{accuracy:.2f}_{savepath}") #saves the model weights to a file
+        total_accuracy = classify_all_images(model)
+
+        torch.save(model.state_dict(), f"ticket_classifier_models/{total_accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 if __name__ == "__main__":
     main()
