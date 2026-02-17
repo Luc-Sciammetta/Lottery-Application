@@ -14,8 +14,6 @@ import random
 
 from PIL import Image
 
-from read_text.read_image_tesseract import read_image
-
 train_ratio = 0.7
 validation_ratio = 0.2
 test_ratio = 0.1
@@ -25,8 +23,8 @@ train_transform = transforms.Compose([
     transforms.Resize((112, 112)), #resizes each image to 112x112 pixels
     transforms.RandomHorizontalFlip(p=0.5), #randomly flips the image horizontally
     transforms.RandomRotation(5), 
-    # transforms.ColorJitter(brightness=0.2, contrast=0.2), #randomly changes brightness and contrast
-    # transforms.RandomResizedCrop(112, scale=(0.8, 1.0)), #randomly crops and resizes the image
+    transforms.ColorJitter(brightness=0.1, contrast=0.1), #randomly changes brightness and contrast
+    transforms.RandomResizedCrop(112, scale=(0.8, 1.0)), #randomly crops and resizes the image
     transforms.RandomPerspective(distortion_scale=0.1, p=0.3), #randomly applies perspective transformation
     transforms.ToTensor(), #converts the image to a PyTorch tensor
     transforms.Normalize(
@@ -99,20 +97,18 @@ class SimpleCNN(nn.Module):
         super().__init__()
 
         #convolutional layers that are used to extract 'features' from the images
-        self.conv1 = nn.Conv2d(3, 8, 3, padding=1) #3 input channels (RGB), 16 output channels, 3x3 kernel which a kernel is a filter that is slid over the image to produce the feature maps
-        self.conv2 = nn.Conv2d(8, 16, 3, padding=1)
-        self.conv3 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv4 = nn.Conv2d(32, 64, 3, padding=1)
-        self.conv5 = nn.Conv2d(64, 128, 3, padding=1)
-        self.conv6 = nn.Conv2d(128, 256, 3, padding=1)
-
+        self.conv1 = nn.Conv2d(3, 16, 3, padding=1) #3 input channels (RGB), 16 output channels, 3x3 kernel which a kernel is a filter that is slid over the image to produce the feature maps
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 128, 3, padding=1)
+        
         self.pool = nn.MaxPool2d(2, 2) #pooling layer to reduce the spatial dimensions of the feature maps
                                        #also done to make the model focus on the most important features
         self.gap = nn.AdaptiveAvgPool2d((4, 4))  #global average pooling layer to reduce the spatial dimensions to 4x4
-        self.dropout = nn.Dropout(p=random.uniform(0.37, 0.405)) #a dropout to prevent the model from overfitting
+        self.dropout = nn.Dropout(p=0.5) #a dropout to prevent the model from overfitting
                                          #it works by randomly setting some of the neurons to zero during training
 
-        self.fc1 = nn.Linear(256 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
+        self.fc1 = nn.Linear(128 * 4 * 4, 128) #the nn nodes that make the final classification decision (kinda like a traditional neural network)
         self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -126,8 +122,6 @@ class SimpleCNN(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
         x = self.pool(F.relu(self.conv4(x)))
-        x = self.pool(F.relu(self.conv5(x)))
-        x = self.pool(F.relu(self.conv6(x)))
 
         x = self.gap(x) #apply global average pooling
         
@@ -158,7 +152,9 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
                                                                                          #label_smoothing is used to prevent the model from becoming too confident in its predictions, which can help improve generalization
 
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.001, weight_decay=1e-4) #updates the model's weights and uses a learning rate (alpha) of 0.001
-                                                                                    #weight_decay is used to prevent overfitting by penalizing model weights that are very large
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5) #pacience: waits x number of epochs before reducing
+                                                                                                    #factor: reduces the learning rate by multiplying it by this factor
+                                                                              #weight_decay is used to prevent overfitting by penalizing model weights that are very large
     l1_lambda = 0.0 #regularization parameter for L1 regularization (WAS 1e-6)
 
     best_validation_loss = float('inf') #initialize the best validation loss to infinity
@@ -216,6 +212,9 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
         val_accuracy = 100 * (correct / total)
         val_loss /= len(validation_dataloader)
         print(f"Validation Loss: {val_loss:.3f}, Validation Accuracy: {val_accuracy:.2f}%")
+
+        print(f"Current Learning Rate: {optimizer.param_groups[0]['lr']}")
+        scheduler.step(val_loss) #adjusts the learning rate based on the validation loss (if the validation loss does not improve for a certain number of epochs, it reduces the learning rate)
 
         if val_loss < best_validation_loss:
             best_validation_loss = val_loss
@@ -374,11 +373,11 @@ def classify_all_images(model, image_root="images", test_logos=False):
 def main():
     savepath = "model_weights.pth"
 
-    for i in range(50):
+    for i in range(500):
         print(f" ----- Training Run {i+1} ----- ")
         savepath = "model_weights.pth"
 
-        model = train_model(epochs = 75, savepath=savepath, patience=50) #trains the model
+        model = train_model(epochs = 40, savepath=savepath, patience=10) #trains the model
 
         model.load_state_dict(torch.load(f"ticket_classifier_models/validation_models/{savepath}")) #loads the best validation model weights
         print("Model Dropout Value: ", model.dropout.p)
@@ -386,7 +385,7 @@ def main():
 
         total_accuracy = classify_all_images(model)
 
-        torch.save(model.state_dict(), f"ticket_classifier_models/{total_accuracy:.2f}_{savepath}") #saves the model weights to a file
+        torch.save(model.state_dict(), f"ticket_classifier_models/{total_accuracy:.2f}_{accuracy:.2f}_{savepath}") #saves the model weights to a file
 
 if __name__ == "__main__":
     main()

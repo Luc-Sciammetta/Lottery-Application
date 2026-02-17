@@ -132,10 +132,10 @@ def classify_all_images(model, image_root="images", test_logos=False):
     return accuracy
 
 def main():
-    model = load_model("ticket_classifier_models/89.10_model_weights.pth") #load a pre-trained model
-    classify_all_images(model, test_logos=False) #classify all images in the dataset
+    model = load_model("ticket_classifier_models/74.18_72.22_model_weights.pth") #load a pre-trained model
+    # classify_all_images(model, test_logos=False) #classify all images in the dataset
 
-    predict_image(model, "images/powerball/IMG_3348.jpeg") #path to a test image
+    predict_image(model, "images/lottoamerica/img5.jpg") #path to a test image
 
     # model = load_model("ticket_classifier_models/37.50_model_weights.pth") #uncomment this line to load a pre-trained model instead of training a new one
     # accuracy = test_model(model) #tests the trained model

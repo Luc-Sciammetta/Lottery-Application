@@ -111,17 +111,37 @@ def detect_image_corners(image_path):
 
     image = read_image(image_path) #read the image using OpenCV
     height, width = image.shape[:2] #get the height and width of the image
-    min_area = (height * width) * 0.1 #set a minimum area threshold to filter out small contours
+    min_area = (height * width) * 0.3 #set a minimum area threshold to filter out small contours
 
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) #convert the image to grayscale for better contour detection
 
-    ret, thresh = cv2.threshold(gray_image, 150, 255, cv2.THRESH_BINARY) #threshold the image to get a binary image. What this does is it turns all pixels with a value above 150 to white (255)
+    # cv2.imshow('Blurred Image', blurred) #show the blurred image for debugging purposes
+    # cv2.waitKey(0)
+    
+    # edged = cv2.Canny(blurred, 50, 200) #apply Canny edge detection to the blurred image to find edges in the image (this helps with contour detection)
+    # cv2.imshow('Edged Image', edged) #show the edged image for debugging purposes
+    # cv2.waitKey(0)
+
+    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)) 
+    # dilated = cv2.dilate(edged, kernel, iterations=2)
+    # cv2.imshow('Dilated Image', dilated) #show the dilated image for debugging purposes
+    # cv2.waitKey(0)
+
+    # contours, hierarchy = cv2.findContours(image=dilated, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE) #finds the contours in the dilated image.
+
+    ret, thresh = cv2.threshold(gray_image, 100, 255, cv2.THRESH_BINARY) #threshold the image to get a binary image. What this does is it turns all pixels with a value above 150 to white (255)
                                                                          #and all pixels with a value below 150 to black (0). This makes it easier to detect contours.
+    #show the thresholded image for debugging purposes
+    cv2.imshow('Thresholded Image', thresh)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     contours, hierarchy = cv2.findContours(image=thresh, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE) #finds the contours in the thresholded image. 
                                                                                                            #Contours are simply curves that join all the continuous points along a boundary that have the same color or intensity.
     
     contours = sorted(contours, key=cv2.contourArea, reverse=True) #sort the contours by area, largest to smallest
+
+    print(len(contours), "contours found") #print the number of contours found for debugging purposes
     ticket_corners = None
     for contour in contours[:30]: #look at the 30 largest contours (we can adjust this number if needed)
         if cv2.contourArea(contour) < min_area:
@@ -138,16 +158,16 @@ def detect_image_corners(image_path):
         print("[DETECT IMAGE CORNERS]: Could not find ticket corners.")
         return None
     
-    # # Draw the 4 corners on the image so you can verify
-    # image_copy = image.copy()
-    # for point in ticket_corners:
-    #     cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
-    # # Draw the outline too
-    # cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
+    # Draw the 4 corners on the image so you can verify
+    image_copy = image.copy()
+    for point in ticket_corners:
+        cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
+    # Draw the outline too
+    cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
 
-    # cv2.imshow('Detected Ticket', image_copy)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    cv2.imshow('Detected Ticket', image_copy)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     return ticket_corners.astype(np.float32) #return the corners as a 4x2 array of floats (this is the format needed for the perspective transform)
     
@@ -186,6 +206,6 @@ def correct_image(image_path):
 
 
 if __name__ == "__main__":
-    image_path = "images/powerball/image - 1.jpeg"
+    image_path = "images/powerball/img14.jpg"
 
     correct_image(image_path)

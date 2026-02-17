@@ -8,9 +8,9 @@ import numpy as np
 
 from PIL import Image
 
-from perspective_correction import correct_image, read_image as open_image
+from read_text.perspective_correction import correct_image, read_image as open_image
 
-def read_image(image):
+def get_text(image):
     """ Read text from an image using EasyOCR.
     Args:
         image (numpy array): The image to read text from.
@@ -48,20 +48,27 @@ def parse_text(result):
 
     # return parsed_data
 
-if __name__ == "__main__":
-    image_path = "images/powerball/image - 1.jpeg"
 
+def read_image_text(image_path):
     corrected_image = correct_image(image_path) #correct the perspective of the image before reading the text
     if corrected_image is not None:
-        result = read_image(corrected_image) #read the text from the corrected image
+        result = get_text(corrected_image) #read the text from the corrected image
     else:
         print("[MAIN]: Could not correct the perspective of the image, reading text from the original image")
         image = open_image(image_path) #read the image using OpenCV
-        result = read_image(image)
+        result = get_text(image)
     
     
     for (bbox, text, prob) in result:
         print(f'Text: {text}, Probability: {prob}')
+
+    return result
+    
+
+if __name__ == "__main__":
+    image_path = "images/powerball/image - 1.jpeg"
+
+    result = read_image_text(image_path)
     
     # parsed_data = parse_text(result)
     # print(parsed_data)

@@ -10,7 +10,7 @@ from PIL import Image
 
 pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
 
-def read_image(image_path, timeout=2):
+def get_text(image_path, timeout=2):
     """ Read text from an image using Tesseract OCR.
     Args:
         image_path (str): The path to the image file.
