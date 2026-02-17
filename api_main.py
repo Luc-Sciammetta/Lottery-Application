@@ -5,8 +5,8 @@ from PIL import Image
 
 import abstract_funcs
 from read_text.read_image_easyocr import read_image_text
-from ticket_classifier import load_model
-from test_ticket_classifier import predict_image
+from ticket_classifiers.ticket_classifier import load_model
+from ticket_classifiers.test_ticket_classifier import predict_image
 
 df = pd.DataFrame()
 HMS = False #we always want to ignore time in the comparison for this method

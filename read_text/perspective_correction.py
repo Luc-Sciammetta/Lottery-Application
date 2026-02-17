@@ -206,6 +206,6 @@ def correct_image(image_path):
 
 
 if __name__ == "__main__":
-    image_path = "images/powerball/img14.jpg"
+    image_path = "images/megamillions/IMG_0706.jpeg"
 
     correct_image(image_path)
