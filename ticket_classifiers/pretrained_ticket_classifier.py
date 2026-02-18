@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from PIL import Image
+
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
@@ -11,9 +13,10 @@ from torch.utils.data import random_split
 from torch.utils.data import Subset
 from torchvision import models
 
-from ticket_classifier import device, count_files_in_directory
-
-print(f"Using device: {device}")
+try: #so that the imports work whether this file is run directly or imported into api_main.py
+    from ticket_classifiers.ticket_classifier import device, count_files_in_directory
+except ModuleNotFoundError:
+    from ticket_classifier import device, count_files_in_directory
 
 train_ratio = 0.7
 validation_ratio = 0.2
@@ -61,8 +64,6 @@ else:
 
 filtered_dataset = Subset(full_dataset, non_logo_indicies) #the filtered dataset 
 
-print(len(filtered_dataset), "images being used for training, validation, and testing")
-
 train_size = int(len(filtered_dataset) * train_ratio)
 validation_size = int(len(filtered_dataset) * validation_ratio)
 test_size = len(filtered_dataset) - train_size - validation_size
@@ -93,6 +94,7 @@ def load_model(filepath):
     """
     model = create_model(num_classes=4)
     model.load_state_dict(torch.load(filepath))
+    model.to(device)
     model.eval()
     return model
 
@@ -121,6 +123,37 @@ def test_model(model):
     print(f"Test Accuracy: {accuracy:.2f}%")
 
     return accuracy
+
+def predict_image(model, image_path):
+    """ Predict the class of a lottery ticket image and print all class confidences.
+    Args:
+        model (SimpleCNN): The trained CNN model.
+        image_path (str): The path to the image file.
+    Returns:
+        str: The predicted class name.
+    """
+    img = Image.open(image_path).convert("RGB")
+    img = test_transform(img).unsqueeze(0).to(device)
+
+    model.eval()
+    with torch.no_grad():
+        output = model(img)
+        probs = torch.softmax(output, dim=1).squeeze(0)  # shape: [num_classes]
+
+    class_names = train_dataset.dataset.classes
+    pred_idx = probs.argmax().item()
+
+    print(f"\nImage: {image_path}")
+    print("Class confidences:")
+
+    for i, class_name in enumerate(class_names):
+        print(
+            f"  {class_name:<15}: {probs[i].item() * 100:.2f}%"
+        )
+
+    print(f"\nPredicted Class: {class_names[pred_idx]}")
+
+    return class_names[pred_idx]
 
 #NOTE: the above not is also the reason why this is copy pasted
 #!--------------- REMOVE THIS LATER -----------------
@@ -293,7 +326,7 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
 if __name__ == "__main__":
     savepath = "model_weights.pth"
 
-    for i in range(100):
+    for i in range(300):
         print(f" ----- Training Run {i+1} ----- ")
         savepath = "model_weights.pth"
 
