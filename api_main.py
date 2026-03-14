@@ -14,12 +14,15 @@ df = pd.DataFrame()
 HMS = False #we always want to ignore time in the comparison for this method
     
 def main():
-    image_path = "images/euromillions/AI_img1.png"
+    image_path = "images/megamillions/img23.jpg"
 
     model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth") #load a pre-trained model
     ticket_type = predict_image(model, image_path) #path to a test image
 
     ticket_text = read_image_text(image_path)
+
+    print(f"Predicted Ticket Type: {ticket_type}")
+    print("Extracted Text:", ticket_text)
 
     # print(f"Predicted Ticket Type: {ticket_type}")
 

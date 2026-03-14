@@ -89,9 +89,9 @@ def apply_warping(image_path, src_points, dst_points, output_width, output_heigh
                                                                                      #the calculated matrix and the specified output dimensions
 
     # display the warped image
-    cv2.imshow('Warped Image', warped_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Warped Image', warped_image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     #save the warped image
     # output_path = "warped_image.jpg"
@@ -132,9 +132,9 @@ def detect_image_corners(image_path):
     ret, thresh = cv2.threshold(gray_image, 100, 255, cv2.THRESH_BINARY) #threshold the image to get a binary image. What this does is it turns all pixels with a value above 150 to white (255)
                                                                          #and all pixels with a value below 150 to black (0). This makes it easier to detect contours.
     #show the thresholded image for debugging purposes
-    cv2.imshow('Thresholded Image', thresh)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Thresholded Image', thresh)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     contours, hierarchy = cv2.findContours(image=thresh, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE) #finds the contours in the thresholded image. 
                                                                                                            #Contours are simply curves that join all the continuous points along a boundary that have the same color or intensity.
@@ -157,17 +157,17 @@ def detect_image_corners(image_path):
     if ticket_corners is None:
         print("[DETECT IMAGE CORNERS]: Could not find ticket corners.")
         return None
-    
-    # Draw the 4 corners on the image so you can verify
-    image_copy = image.copy()
-    for point in ticket_corners:
-        cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
-    # Draw the outline too
-    cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
 
-    cv2.imshow('Detected Ticket', image_copy)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # Draw the 4 corners on the image so you can verify
+    # image_copy = image.copy()
+    # for point in ticket_corners:
+    #     cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
+    # # Draw the outline too
+    # cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
+
+    # cv2.imshow('Detected Ticket', image_copy)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     return ticket_corners.astype(np.float32) #return the corners as a 4x2 array of floats (this is the format needed for the perspective transform)
     
@@ -181,7 +181,23 @@ def correct_image(image_path):
         numpy array: The perspective-corrected image, or None if the corners could not be detected or warping failed.
     """
 
+    image = read_image(image_path)
+    print("dimensions ", image.shape)
+    
+    margin = 300
     src_points = detect_image_corners(image_path) #detect the corners of the ticket in the image
+    corners_in_margins = 0
+
+    if src_points is None:
+        return None
+    for index, point in enumerate(src_points):
+        x, y = point
+        if (x < margin or x > image.shape[1] - margin) and (y < margin or y > image.shape[0] - margin):
+            corners_in_margins += 1
+    if corners_in_margins == 4:
+        #image is nicely centered, no need to warp it
+        pass
+    
     if src_points is not None:  
         src_points = order_points(src_points) #order the points in a consistent way (top-left, top-right, bottom-right, bottom-left)
         output_width, output_height = get_output_dimensions(src_points) #calculate the dimensions of the output image based on the source points
@@ -206,6 +222,6 @@ def correct_image(image_path):
 
 
 if __name__ == "__main__":
-    image_path = "images/megamillions/IMG_0706.jpeg"
+    image_path = "images/megamillions/IMG_3468.jpeg"
 
     correct_image(image_path)

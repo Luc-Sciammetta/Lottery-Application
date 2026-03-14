@@ -124,7 +124,7 @@ def test_model(model):
 
     return accuracy
 
-def predict_image(model, image_path):
+def predict_image(model, image_path, print_out=False):
     """ Predict the class of a lottery ticket image and print all class confidences.
     Args:
         model (SimpleCNN): The trained CNN model.
@@ -143,15 +143,16 @@ def predict_image(model, image_path):
     class_names = train_dataset.dataset.classes
     pred_idx = probs.argmax().item()
 
-    print(f"\nImage: {image_path}")
-    print("Class confidences:")
+    if print_out:
+        print(f"\nImage: {image_path}")
+        print("Class confidences:")
 
-    for i, class_name in enumerate(class_names):
-        print(
-            f"  {class_name:<15}: {probs[i].item() * 100:.2f}%"
-        )
+        for i, class_name in enumerate(class_names):
+            print(
+                f"  {class_name:<15}: {probs[i].item() * 100:.2f}%"
+            )
 
-    print(f"\nPredicted Class: {class_names[pred_idx]}")
+        print(f"\nPredicted Class: {class_names[pred_idx]}")
 
     return class_names[pred_idx]
 
@@ -193,13 +194,13 @@ def classify_all_images(model, image_root="images", test_logos=False):
             correct += int(is_correct)
             total += 1
 
-            # print(
-            #     f"Image: {img_path} | "
-            #     f"True: {class_names[label]} | "
-            #     f"Predicted: {class_names[pred]} | "
-            #     f"Conf: {probs[0][pred].item():.2f} | "
-            #     f"{'✓' if is_correct else '✗'}"
-            # )
+            print(
+                f"Image: {img_path} | "
+                f"True: {class_names[label]} | "
+                f"Predicted: {class_names[pred]} | "
+                f"Conf: {probs[0][pred].item():.2f} | "
+                f"{'✓' if is_correct else '✗'}"
+            )
 
     accuracy = 100 * correct / total
     print("\n-----------------------------------")
@@ -326,7 +327,12 @@ def train_model(epochs = 10, patience = 5, savepath="model_weights.pth"):
 if __name__ == "__main__":
     savepath = "model_weights.pth"
 
-    for i in range(300):
+    # model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth")
+    # classify_all_images(model, test_logos=False)
+
+    print(device)
+
+    for i in range(30):
         print(f" ----- Training Run {i+1} ----- ")
         savepath = "model_weights.pth"
 
