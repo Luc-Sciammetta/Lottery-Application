@@ -17,9 +17,11 @@ This will be done using image recognition techniques to determine lottery ticket
   - EuroMillions
 - A realtively (89% test accuracy with dataset images) accurate ticket classifier using PyTorch to identify lottery ticket types from images.
 - A perspective correction module using OpenCV to correct the perspective of the lottery ticket images before performing OCR (still needing to be implemented).
+- Can get the date of the lottery draw from OCR results
+
 
 ## Currently Developing
-- A number extractor using easyOCR (Optical Character Recognition) to read numbers from ticket images.
+- Getting the numbers from the lottery ticket using OCR (currently has some reliability issues that are being fixed).
 - A more accurate way of getting the corners of the lottery ticket for perspective warping. 
 
 ## Things to add

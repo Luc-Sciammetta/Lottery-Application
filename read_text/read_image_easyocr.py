@@ -3,6 +3,8 @@ This file contains the functionality for reading text from an image using EasyOC
 It defines a function `read_image` that takes the path to an image file and returns a list of the extracted text. 
 """
 
+from logging import config
+
 import easyocr
 import numpy as np
 import re
@@ -56,7 +58,7 @@ def parse_text(result, config):
     """
     possible_dates = []
     possible_weekdays = []
-    filtered_text = [text for bbox, text, prob in result if prob > 0.25] # Filter out text with low probability
+    filtered_text = [text for bbox, text, prob in result if prob > 0.15] # Filter out text with low probability
 
     #get the date of the lottery draw
     
@@ -129,7 +131,7 @@ def parse_text(result, config):
     print("Possible Weekdays:", possible_weekdays)
 
     paren_number_pattern = re.compile(r'^\(\d+\)$')  # matches (22), (5), etc.
-    row_label_pattern = re.compile(r'^([A-J])\.?(\d+)?$', re.IGNORECASE)
+    row_label_pattern = re.compile(r'^([A-J])\.?\s?(\d+)?$', re.IGNORECASE)
 
     draw_numbers = []
     draw_special = []
@@ -205,9 +207,11 @@ def parse_text(result, config):
                         ahead_row_index += 1
                         if current_text_index + ahead_row_index >= len(filtered_text):
                             break
-                    
+                            
                     draw_numbers.append(found_numbers)                
-                
+                    print(f"[DEBUG] After main number loop: ahead_row_index={ahead_row_index}, found_numbers={found_numbers}, found_special={found_special}")
+
+
                     #find special numbers (only if not already found)
                     if len(found_special) < config['special']:
                         exit = False
@@ -239,6 +243,7 @@ def parse_text(result, config):
                                 if current_text_index + ahead_row_index >= len(filtered_text):
                                     break
                                 tokens = filtered_text[current_text_index + ahead_row_index].split()
+                                print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
                                 for token in tokens:
                                     if paren_number_pattern.match(token): 
                                         # parenthesized number — grab it directly
@@ -252,7 +257,11 @@ def parse_text(result, config):
                                         special_label_tokens = tokens
                                         exit = True
                                         break
-                                ahead_row_index += 1
+                                    else:
+                                        exit = True
+                                        break
+                                if not exit:
+                                    ahead_row_index += 1
                                 buffer -= 1
 
                             # if we found a label in the buffer scan, find the special number the same way as before
@@ -278,6 +287,24 @@ def parse_text(result, config):
                                                 break
                                         ahead_row_index += 1
 
+                    #for some lottery tickets, the OCR doesnt pick up on the special label, but the special numbers are right after
+                    #the main numbers, so if this happens, we will grab any numbers that come right after the main numbers as the special numbers until we hit a non-digit or we have enough special numbers. 
+                    if len(found_special) < config['special']:
+                        fallback_exit = False
+                        while len(found_special) < config['special'] and not fallback_exit:
+                            if current_text_index + ahead_row_index >= len(filtered_text):
+                                break
+                            tokens = filtered_text[current_text_index + ahead_row_index].split()
+                            for token in tokens:
+                                if token.isdigit() and len(token) <= 2:
+                                    found_special.append(token)
+                                    if len(found_special) >= config['special']:
+                                        break
+                                else:
+                                    fallback_exit = True
+                                    break
+                            ahead_row_index += 1
+
                     draw_special.append(found_special)
                     draw_row += 1
 
@@ -286,6 +313,102 @@ def parse_text(result, config):
             break
 
 
+    print("Draw Numbers after row label parsing:", draw_numbers)
+    print("Draw Special after row label parsing:", draw_special)
+
+
+    #now there may be some draw numbers that didnt have a row label which we might still be able to find,
+    #so we will look through the text again and try to find any numbers that are not already in our
+    #draw numbers list that look like the way the draw numbers should beand add them to the final lists.
+    i = 0
+    while i < len(filtered_text):
+        print("[DEBUG] Checking text for unlabeled numbers:", filtered_text[i])
+        tokens = filtered_text[i].split()
+        candidate_numbers = []
+        candidate_special = []
+        special_label_token = False
+        special_label_token_index = -1
+        special_label_tokens = None
+        ahead = 0
+        done = False #keeps track to see if we have enough info to make a group of numbers
+
+        while (len(candidate_numbers) < config['main'] or (special_label_token and len(candidate_special) < config['special'])) and not done:
+            if i + ahead >= len(filtered_text):
+                break
+            tokens = filtered_text[i + ahead].split()
+            print(f"[DEBUG] Lookahead text: {filtered_text[i + ahead]} | Tokens: {tokens}")
+            for token in tokens:
+                print(f"[DEBUG] Checking token: {token} | Candidate Numbers: {candidate_numbers} | Candidate Special: {candidate_special} | Special Label Token: {special_label_token}")
+                if token.isdigit() and len(token) <= 2:
+                    if special_label_token: #then this digit is the special number
+                        candidate_special.append(token)
+                        done = True
+                        break
+                    elif len(candidate_numbers) < config['main']:
+                        candidate_numbers.append(token)
+                    else:
+                        candidate_numbers = [] #we have an extra main number, so something isnt right here, so we stop
+                        done = True
+                        break
+                elif paren_number_pattern.match(token) and len(token) <= 4:
+                    candidate_special.append(token.strip('()'))
+                    done = True
+                    break
+                elif token in config['special_labels']:
+                    special_label_token = True
+                    special_label_token_index = tokens.index(token)
+                    special_label_tokens = tokens
+                else: #we have encountered a token that is not a number or a special label, so we can stop looking
+                    candidate_numbers = []
+                    done = True
+                    break
+            ahead += 1
+        
+        #now check to see if we have already found this group of numbers
+        if len(candidate_numbers) == config['main']:
+            already_found = any(candidate_numbers == entry for entry in draw_numbers)
+            if not already_found:
+                print(f"[DEBUG] Found candidate numbers: {candidate_numbers} | Candidate special: {candidate_special}")
+                draw_numbers.append(candidate_numbers)
+                draw_special.append(candidate_special if len(candidate_special) > 0 else [])
+        i += 1
+
+    print("Draw Numbers after lookahead parsing:", draw_numbers)
+    print("Draw Special after lookahead parsing:", draw_special)
+
+    #for some reason, we might get duplicates/false draw numbers from the above logic, so we try to 
+    #find those and then remove them here
+    to_remove = set() #stores the indicies of draw numbers that we want to remove
+    for i in range(len(draw_numbers)):
+        if i in to_remove:
+            continue #we have already marked this index for removal, so skip it
+        
+        for j in range(i + 1, len(draw_numbers)):
+            if j in to_remove:
+                continue #we have already marked this index for removal, so skip it
+            
+            entry_a = draw_numbers[i] #one row of the draw numbers
+            entry_b = draw_numbers[j] #another row of the draw numbers that is to be compared to entry_a
+
+            if len(entry_a) == 0 or len(entry_b) == 0:
+                continue #skip empty entries
+
+            # count how many numbers appear in both entries
+            matches = 0
+            for num in entry_a:
+                if num in entry_b:
+                    matches += 1
+
+            if matches >= config['main'] - 1: 
+                to_remove.add(j) #mark for removal
+
+    #remake the lists without the marked entries
+    draw_numbers = [entry for idx, entry in enumerate(draw_numbers) if idx not in to_remove]
+    draw_special = [entry for idx, entry in enumerate(draw_special) if idx not in to_remove]
+
+    print("Draw Numbers after duplicate removal:", draw_numbers)
+    print("Draw Special after duplicate removal:", draw_special)
+    
     return possible_dates, possible_weekdays, draw_numbers, draw_special
 
 
@@ -309,7 +432,9 @@ def read_image_text(image_path, game):
 
 
 if __name__ == "__main__":
-    image_path = "images/powerball/img9.jpg"
+    image_path = "images/powerball/img1.jpg"
+    # image_path = "images/lottoamerica/img3.jpg"
+
 
     model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth") #load a pre-trained model
     game = predict_image(model, image_path) #path to a test image

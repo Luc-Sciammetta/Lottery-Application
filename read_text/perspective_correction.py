@@ -159,15 +159,15 @@ def detect_image_corners(image_path):
         return None
 
     # Draw the 4 corners on the image so you can verify
-    # image_copy = image.copy()
-    # for point in ticket_corners:
-    #     cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
-    # # Draw the outline too
-    # cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
+    image_copy = image.copy()
+    for point in ticket_corners:
+        cv2.circle(image_copy, tuple(point), 10, (0, 255, 0), -1)
+    # Draw the outline too
+    cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
 
-    # cv2.imshow('Detected Ticket', image_copy)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    cv2.imshow('Detected Ticket', image_copy)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     return ticket_corners.astype(np.float32) #return the corners as a 4x2 array of floats (this is the format needed for the perspective transform)
     
