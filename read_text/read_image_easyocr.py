@@ -3,8 +3,6 @@ This file contains the functionality for reading text from an image using EasyOC
 It defines a function `read_image` that takes the path to an image file and returns a list of the extracted text. 
 """
 
-from logging import config
-
 import easyocr
 import numpy as np
 import re
@@ -29,6 +27,10 @@ LOTTERY_CONFIGS = {
     "lottoamerica": {"main": 5, "special": 1, "special_labels": ['All Star Bonus', "EP", "QP", "OP", "SB"]},
 }
 
+paren_number_pattern = re.compile(r'^\(\d+\)$')  # matches (22), (5), etc.
+row_label_pattern = re.compile(r'^([A-J])\.?\s?(\d+)?$', re.IGNORECASE)
+
+
 def get_text(image):
     """ Read text from an image using EasyOCR.
     Args:
@@ -36,16 +38,125 @@ def get_text(image):
     Returns:
         list: A list of tuples containing the bounding box, text, and probability for each detected text.
     """
-
     img = np.array(Image.fromarray(image).convert('L')) #convert to grayscale for better OCR performance and then convert to numpy array for easyOCR
-
     reader = easyocr.Reader(['en', 'es', 'fr', 'de']) # Initialize the EasyOCR reader with the desired languages
     result = reader.readtext(img) # Read the text from the image
-
-    # for (bbox, text, prob) in result:
-    #     print(f'Text: {text}, Probability: {prob}')
-
     return result
+
+
+def find_special_numbers(filtered_text, current_text_index, ahead_row_index, found_special, special_label_token, special_label_token_index, special_label_tokens, config):
+    """Search for special numbers after the main numbers have been found.
+    Handles three cases:
+    1. Special label already seen — numbers are to the right or on the next row(s)
+    2. No label found — buffer scan for paren numbers or special labels, then fallback to plain digits
+    Args:
+        filtered_text (list): The filtered OCR text entries.
+        current_text_index (int): The index of the current row label in filtered_text.
+        ahead_row_index (int): How many entries ahead we've already scanned.
+        found_special (list): Any special numbers already found.
+        special_label_token (bool): Whether a special label was seen during main number scan.
+        special_label_token_index (int): Index of the special label token within its row.
+        special_label_tokens (list): The tokens from the row where the special label was found.
+        config (dict): The lottery config.
+    Returns:
+        list: The found special numbers.
+    """
+    if len(found_special) >= config['special']:
+        return found_special
+
+    stop = False
+
+    if special_label_token: #we have seen the special label, so we know there will be a special number soon
+        if special_label_token_index + 1 < len(special_label_tokens):
+            # numbers are to the right of the label on the same row
+            for token in special_label_tokens[special_label_token_index + 1:]:
+                if token.isdigit() and len(token) <= 2:
+                    found_special.append(token)
+                else:
+                    break
+        else:
+            # numbers are on the next row(s)
+            while len(found_special) < config['special'] and not stop:
+                if current_text_index + ahead_row_index >= len(filtered_text):
+                    break
+                tokens = filtered_text[current_text_index + ahead_row_index].split()
+                for token in tokens:
+                    if token.isdigit() and len(token) <= 2:
+                        found_special.append(token)
+                    else: #we have found text or a number that is not a special number
+                        stop = True
+                        break
+                ahead_row_index += 1
+    else:
+        # no label found, scan up to 3 rows below for a special label or parenthesized number
+        buffer = 3
+        while buffer > 0 and not stop:
+            if current_text_index + ahead_row_index >= len(filtered_text):
+                break
+            tokens = filtered_text[current_text_index + ahead_row_index].split()
+            print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
+            for token in tokens:
+                if paren_number_pattern.match(token):
+                    # parenthesized number — grab it directly
+                    found_special.append(token.strip('()'))
+                    stop = True
+                    break
+                elif token in config['special_labels']: #we found a special label
+                    # found the label — now grab the number after it
+                    special_label_token = True
+                    special_label_token_index = tokens.index(token)
+                    special_label_tokens = tokens
+                    stop = True
+                    break
+                else:
+                    stop = True
+                    break
+            if not stop:
+                ahead_row_index += 1
+            buffer -= 1
+
+        # if we found a label in the buffer scan and no (or not enough) special numbers, find the special number the same way as before
+        if special_label_token and len(found_special) < config['special']:
+            if special_label_token_index + 1 < len(special_label_tokens):
+                for token in special_label_tokens[special_label_token_index + 1:]:
+                    if token.isdigit() and len(token) <= 2:
+                        found_special.append(token)
+                    else:
+                        break
+            else:
+                # number is on the next row
+                label_stop = False
+                while len(found_special) < config['special'] and not label_stop:
+                    if current_text_index + ahead_row_index >= len(filtered_text):
+                        break
+                    tokens = filtered_text[current_text_index + ahead_row_index].split()
+                    for token in tokens:
+                        if token.isdigit() and len(token) <= 2:
+                            found_special.append(token)
+                        else:
+                            label_stop = True
+                            break
+                    ahead_row_index += 1
+
+    #for some lottery tickets, the OCR doesnt pick up on the special label, but the special numbers are right after
+    #the main numbers, so if this happens, we will grab any numbers that come right after the main numbers as the special numbers until we hit a non-digit or we have enough special numbers.
+    if len(found_special) < config['special']:
+        fallback_stop = False
+        while len(found_special) < config['special'] and not fallback_stop:
+            if current_text_index + ahead_row_index >= len(filtered_text):
+                break
+            tokens = filtered_text[current_text_index + ahead_row_index].split()
+            for token in tokens:
+                if token.isdigit() and len(token) <= 2:
+                    found_special.append(token)
+                    if len(found_special) >= config['special']:
+                        break
+                else:
+                    fallback_stop = True
+                    break
+            ahead_row_index += 1
+
+    return found_special
 
 
 def parse_text(result, config):
@@ -61,14 +172,13 @@ def parse_text(result, config):
     filtered_text = [text for bbox, text, prob in result if prob > 0.15] # Filter out text with low probability
 
     #get the date of the lottery draw
-    
     month_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s*\b', re.IGNORECASE)
     date_pattern = re.compile(r'\b(\d{1,2})\b') #tries to find any standalone numbers that could be a date, we will later filter these based on their proximity to month names and other special cases
     weekday_pattern = re.compile(r'\b(MON|TUE|WED|THU|FRI|SAT|SUN|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\s*\b', re.IGNORECASE)
     month_I_pattern = re.compile(r'\b(JANI|FEBI|MARI|APRI|MAYI|JUNI|JULI|AUGI|SEPI|OCTI|NOVI|DECI)(\d)', re.IGNORECASE)
     month_O_pattern = re.compile(r'\b(JANO|FEBO|MARO|APRO|MAYO|JUNO|JULO|AUGO|SEPO|OCTO|NOVO|DECO)(\d)', re.IGNORECASE)
     month_Q_pattern = re.compile(r'\b(JANQ|FEBQ|MARQ|APRQ|MAYQ|JUNQ|JULQ|AUGQ|SEPQ|OCTQ|NOVQ|DECQ)(\d)', re.IGNORECASE)
-    month_fused_with_date_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{1,2})\b',re.IGNORECASE)
+    month_fused_with_date_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{1,2})\b', re.IGNORECASE)
 
     for text in filtered_text:
         special_case = ''
@@ -84,7 +194,7 @@ def parse_text(result, config):
         if month_I_match:
             special_case = "I"
             month = month_I_match.group(1)[:-1]  # e.g. "JANI" -> "JAN"
-            digit = month_I_match.group(2)       # e.g. "5"
+            digit = month_I_match.group(2)        # e.g. "5"
         elif month_O_match:
             special_case = "O"
             month = month_O_match.group(1)[:-1]
@@ -98,30 +208,22 @@ def parse_text(result, config):
             month = month_fused_with_date_match.group(1)
             digit = month_fused_with_date_match.group(2)
 
-
         #look for perfect matches
         month_match = month_pattern.search(text)
         weekday_match = weekday_pattern.search(text)
         date_match = date_pattern.search(text)
 
-        # print(f"Checking text: '{text}' | Month: {month_match.group() if month_match else None}, Date: {date_match.group() if date_match else None}, Weekday: {weekday_match.group() if weekday_match else None}")
-        # print(f"SPECIAL: I={month_I_match.group() if month_I_match else None}, O={month_O_match.group() if month_O_match else None}, Q={month_Q_match.group() if month_Q_match else None}")
-
         #add the month and date to the possible dates list
         if month_match and date_match and special_case == '':
             possible_dates.append([month_match.group(), date_match.group()])
         elif special_case == "I" and digit:
-            date = '1' + digit #adjust for special cases
-            possible_dates.append([month, date])
+            possible_dates.append([month, '1' + digit]) #adjust for special cases
         elif special_case == "O" and digit:
-            date = '0' + digit
-            possible_dates.append([month, date])
+            possible_dates.append([month, '0' + digit])
         elif special_case == "Q" and digit:
-            date = '0' + digit
-            possible_dates.append([month, date])
+            possible_dates.append([month, '0' + digit])
         elif special_case == "FUSED" and month and digit:
             possible_dates.append([month, digit])
-        
 
         #if we match a weekday
         if weekday_match:
@@ -130,12 +232,8 @@ def parse_text(result, config):
     print("Possible Dates:", possible_dates)
     print("Possible Weekdays:", possible_weekdays)
 
-    paren_number_pattern = re.compile(r'^\(\d+\)$')  # matches (22), (5), etc.
-    row_label_pattern = re.compile(r'^([A-J])\.?\s?(\d+)?$', re.IGNORECASE)
-
     draw_numbers = []
     draw_special = []
-
     rows = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H', 8: 'I', 9: 'J'}
     draw_row = 0
     current_text_index = 0
@@ -145,16 +243,16 @@ def parse_text(result, config):
         match = row_label_pattern.match(current_text) #match to see if the text is a row label like "A", "B", etc. with an optional number after it (e.g. "A.1", "B2", etc.)
         if match: #we have a match
             letter = match.group(1).upper() #get the letter
-            
+
             #find the right matched row (so A = 0, B = 1, etc.)
-            matched_row = None 
+            matched_row = None
             for k, v in rows.items():
                 if v == letter:
                     matched_row = k
                     break
 
             if matched_row is not None and matched_row >= draw_row:
-                #look ahead to see if there are numbers afterward, indicating we have found a valid row label.
+                #look ahead to see if there are numbers afterward, indicating we have found a valid row label
                 lookahead_found = False
                 for i in range(1, 4): #look ahead 3 rows
                     if current_text_index + i >= len(filtered_text):
@@ -162,7 +260,7 @@ def parse_text(result, config):
                     peek_tokens = filtered_text[current_text_index + i].split()
                     for peek_token in peek_tokens:
                         if peek_token.isdigit() and len(peek_token) <= 2:
-                            #we found a number in the lookahead, this is a good sign that we have found a valid row label 
+                            #we found a number in the lookahead, this is a good sign that we have found a valid row label
                             lookahead_found = True
                             break
                     if lookahead_found:
@@ -194,7 +292,7 @@ def parse_text(result, config):
                                     # found_numbers is full, this digit must be the special number
                                     found_special.append(token)
                                     break
-                            elif paren_number_pattern.match(token)  and len(token) <= 4: #2 for the number and 2 for the ()
+                            elif paren_number_pattern.match(token) and len(token) <= 4: #2 for the number and 2 for the ()
                                 found_special.append(token.strip('()'))
                                 break
                             elif token in config['special_labels']:
@@ -207,104 +305,11 @@ def parse_text(result, config):
                         ahead_row_index += 1
                         if current_text_index + ahead_row_index >= len(filtered_text):
                             break
-                            
-                    draw_numbers.append(found_numbers)                
+
+                    draw_numbers.append(found_numbers)
                     print(f"[DEBUG] After main number loop: ahead_row_index={ahead_row_index}, found_numbers={found_numbers}, found_special={found_special}")
 
-
-                    #find special numbers (only if not already found)
-                    if len(found_special) < config['special']:
-                        exit = False
-                        if special_label_token: #we have seen the special label, so we know there will be a special number soon.
-                            if special_label_token_index + 1 < len(special_label_tokens):
-                                # numbers are to the right of the label on the same row
-                                for token in special_label_tokens[special_label_token_index + 1:]:
-                                    if token.isdigit() and len(token) <= 2:
-                                        found_special.append(token)
-                                    else:
-                                        break
-                            else:
-                                # numbers are on the next row(s)
-                                while len(found_special) < config['special'] and not exit:
-                                    if current_text_index + ahead_row_index >= len(filtered_text):
-                                        break
-                                    tokens = filtered_text[current_text_index + ahead_row_index].split()
-                                    for token in tokens:
-                                        if token.isdigit() and len(token) <= 2:
-                                            found_special.append(token)
-                                        else: #we have found text or a number that is not a special number
-                                            exit = True
-                                            break
-                                    ahead_row_index += 1
-                        else:
-                            # no label found, scan up to 3 rows below for a special label or parenthesized number
-                            buffer = 3
-                            while buffer > 0 and not exit:
-                                if current_text_index + ahead_row_index >= len(filtered_text):
-                                    break
-                                tokens = filtered_text[current_text_index + ahead_row_index].split()
-                                print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
-                                for token in tokens:
-                                    if paren_number_pattern.match(token): 
-                                        # parenthesized number — grab it directly
-                                        found_special.append(token.strip('()'))
-                                        exit = True
-                                        break
-                                    elif token in config['special_labels']: #we found a special label
-                                        # found the label — now grab the number after it
-                                        special_label_token = True
-                                        special_label_token_index = tokens.index(token)
-                                        special_label_tokens = tokens
-                                        exit = True
-                                        break
-                                    else:
-                                        exit = True
-                                        break
-                                if not exit:
-                                    ahead_row_index += 1
-                                buffer -= 1
-
-                            # if we found a label in the buffer scan, find the special number the same way as before
-                            if special_label_token and len(found_special) < config['special']:
-                                if special_label_token_index + 1 < len(special_label_tokens):
-                                    for token in special_label_tokens[special_label_token_index + 1:]:
-                                        if token.isdigit() and len(token) <= 2:
-                                            found_special.append(token)
-                                        else:
-                                            break
-                                else:
-                                    # number is on the next row
-                                    label_exit = False
-                                    while len(found_special) < config['special'] and not label_exit:
-                                        if current_text_index + ahead_row_index >= len(filtered_text):
-                                            break
-                                        tokens = filtered_text[current_text_index + ahead_row_index].split()
-                                        for token in tokens:
-                                            if token.isdigit() and len(token) <= 2:
-                                                found_special.append(token)
-                                            else:
-                                                label_exit = True
-                                                break
-                                        ahead_row_index += 1
-
-                    #for some lottery tickets, the OCR doesnt pick up on the special label, but the special numbers are right after
-                    #the main numbers, so if this happens, we will grab any numbers that come right after the main numbers as the special numbers until we hit a non-digit or we have enough special numbers. 
-                    if len(found_special) < config['special']:
-                        fallback_exit = False
-                        while len(found_special) < config['special'] and not fallback_exit:
-                            if current_text_index + ahead_row_index >= len(filtered_text):
-                                break
-                            tokens = filtered_text[current_text_index + ahead_row_index].split()
-                            for token in tokens:
-                                if token.isdigit() and len(token) <= 2:
-                                    found_special.append(token)
-                                    if len(found_special) >= config['special']:
-                                        break
-                                else:
-                                    fallback_exit = True
-                                    break
-                            ahead_row_index += 1
-
+                    found_special = find_special_numbers(filtered_text, current_text_index, ahead_row_index, found_special, special_label_token, special_label_token_index, special_label_tokens, config)
                     draw_special.append(found_special)
                     draw_row += 1
 
@@ -312,18 +317,15 @@ def parse_text(result, config):
         if current_text_index >= len(filtered_text) or draw_row >= len(rows):
             break
 
-
     print("Draw Numbers after row label parsing:", draw_numbers)
     print("Draw Special after row label parsing:", draw_special)
 
-
     #now there may be some draw numbers that didnt have a row label which we might still be able to find,
     #so we will look through the text again and try to find any numbers that are not already in our
-    #draw numbers list that look like the way the draw numbers should beand add them to the final lists.
+    #draw numbers list that look like the way the draw numbers should be and add them to the final lists.
     i = 0
     while i < len(filtered_text):
         print("[DEBUG] Checking text for unlabeled numbers:", filtered_text[i])
-        tokens = filtered_text[i].split()
         candidate_numbers = []
         candidate_special = []
         special_label_token = False
@@ -363,30 +365,29 @@ def parse_text(result, config):
                     done = True
                     break
             ahead += 1
-        
+
         #now check to see if we have already found this group of numbers
         if len(candidate_numbers) == config['main']:
             already_found = any(candidate_numbers == entry for entry in draw_numbers)
             if not already_found:
                 print(f"[DEBUG] Found candidate numbers: {candidate_numbers} | Candidate special: {candidate_special}")
                 draw_numbers.append(candidate_numbers)
-                draw_special.append(candidate_special if len(candidate_special) > 0 else [])
+                draw_special.append(candidate_special if candidate_special else [])
         i += 1
 
     print("Draw Numbers after lookahead parsing:", draw_numbers)
     print("Draw Special after lookahead parsing:", draw_special)
 
-    #for some reason, we might get duplicates/false draw numbers from the above logic, so we try to 
+    #for some reason, we might get duplicates/false draw numbers from the above logic, so we try to
     #find those and then remove them here
-    to_remove = set() #stores the indicies of draw numbers that we want to remove
+    to_remove = set() #stores the indices of draw numbers that we want to remove
     for i in range(len(draw_numbers)):
         if i in to_remove:
             continue #we have already marked this index for removal, so skip it
-        
         for j in range(i + 1, len(draw_numbers)):
             if j in to_remove:
                 continue #we have already marked this index for removal, so skip it
-            
+
             entry_a = draw_numbers[i] #one row of the draw numbers
             entry_b = draw_numbers[j] #another row of the draw numbers that is to be compared to entry_a
 
@@ -394,12 +395,9 @@ def parse_text(result, config):
                 continue #skip empty entries
 
             # count how many numbers appear in both entries
-            matches = 0
-            for num in entry_a:
-                if num in entry_b:
-                    matches += 1
+            matches = sum(1 for num in entry_a if num in entry_b)
 
-            if matches >= config['main'] - 1: 
+            if matches >= config['main'] - 1:
                 to_remove.add(j) #mark for removal
 
     #remake the lists without the marked entries
@@ -408,7 +406,7 @@ def parse_text(result, config):
 
     print("Draw Numbers after duplicate removal:", draw_numbers)
     print("Draw Special after duplicate removal:", draw_special)
-    
+
     return possible_dates, possible_weekdays, draw_numbers, draw_special
 
 
@@ -420,25 +418,22 @@ def read_image_text(image_path, game):
         print("[MAIN]: Could not correct the perspective of the image, reading text from the original image")
         image = open_image(image_path) #read the image using OpenCV
         result = get_text(image)
-    
+
     counter = 0
     for (bbox, text, prob) in result:
         print(f'Counter: {counter}, Text: {text}, Probability: {prob}')
         counter += 1
 
     result = parse_text(result, LOTTERY_CONFIGS.get(game)) #parse the extracted text to find the relevant information
-
     return result
 
 
 if __name__ == "__main__":
-    image_path = "images/powerball/img1.jpg"
-    # image_path = "images/lottoamerica/img3.jpg"
-
+    image_path = "images/powerball/img9.jpg"
 
     model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth") #load a pre-trained model
     game = predict_image(model, image_path) #path to a test image
-    
+
     print(f"Reading text from image: {image_path}")
     dates, weekdays, draw_numbers, draw_special = read_image_text(image_path, game)
     print("Parsed Result:")
@@ -446,20 +441,3 @@ if __name__ == "__main__":
     print("Possible Weekdays:", weekdays)
     print("Draw Numbers:", draw_numbers)
     print("Special Numbers:", draw_special)
-    
-
-    # image_path = "images/megamillions/IMG_3451.jpeg"
-    # print(f"Reading text from image: {image_path}")
-    # result = read_image_text(image_path)
-    # image_path = "images/lottoamerica/img8.jpg"
-    # print(f"Reading text from image: {image_path}")
-    # result = read_image_text(image_path)
-    # image_path = "images/euromillions/img3.jpg"
-    # print(f"Reading text from image: {image_path}")
-    # result = read_image_text(image_path)
-    # image_path = "images/powerball/img14.jpg"
-    # print(f"Reading text from image: {image_path}")
-    # result = read_image_text(image_path)
-    
-    # parsed_data = parse_text(result)
-    # print(parsed_data)
