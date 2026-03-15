@@ -21,10 +21,10 @@ except ImportError:
     from perspective_correction import correct_image, read_image as open_image
 
 LOTTERY_CONFIGS = {
-    "euromillions": {"main": 5, "special": 2, "special_labels": ["Lucky Stars", "--", '-', '++']},
+    "euromillions": {"main": 5, "special": 2, "special_labels": ["Lucky", "--", '-', '++', "LD"]},
     "powerball":    {"main": 5, "special": 1, "special_labels": ['PB', "EP", "QP", "OP", "-", "PWR"]},
     "megamillions": {"main": 5, "special": 1, "special_labels": ['MB', "EP", "QP", "OP", "AP"]},
-    "lottoamerica": {"main": 5, "special": 1, "special_labels": ['All Star Bonus', "EP", "QP", "OP", "SB"]},
+    "lottoamerica": {"main": 5, "special": 1, "special_labels": ['Star', "EP", "QP", "OP", "SB"]},
 }
 
 paren_number_pattern = re.compile(r'^\(\d+\)$')  # matches (22), (5), etc.
@@ -42,6 +42,26 @@ def get_text(image):
     reader = easyocr.Reader(['en', 'es', 'fr', 'de']) # Initialize the EasyOCR reader with the desired languages
     result = reader.readtext(img) # Read the text from the image
     return result
+
+
+def merge_split_digits(tokens):
+    """
+    Merge tokens that are split digits. Sometimes the OCR might split a two-digit number into two separate tokens, so we need to merge them back together.
+    Args:
+        tokens (list): A list of tokens to check for split digits.
+    Returns:
+        list: A new list of tokens with split digits merged back together.
+    """
+    merged = []
+    i = 0
+    while i < len(tokens):
+        if (i+1 < len(tokens) and tokens[i].isdigit() and len(tokens[i]) == 1 and tokens[i+1].isdigit() and len(tokens[i+1]) == 1):
+            merged.append(tokens[i] + tokens[i+1])
+            i += 2 #skip the next token since we have merged it
+        else:
+            merged.append(tokens[i])
+            i += 1
+    return merged
 
 
 def find_special_numbers(filtered_text, current_text_index, ahead_row_index, found_special, special_label_token, special_label_token_index, special_label_tokens, config):
@@ -72,6 +92,9 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
             for token in special_label_tokens[special_label_token_index + 1:]:
                 if token.isdigit() and len(token) <= 2:
                     found_special.append(token)
+                elif paren_number_pattern.match(token) and len(token) <= 4:
+                    found_special.append(token.strip('()'))
+                    break
                 else:
                     break
         else:
@@ -80,6 +103,7 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
                 if current_text_index + ahead_row_index >= len(filtered_text):
                     break
                 tokens = filtered_text[current_text_index + ahead_row_index].split()
+                tokens = merge_split_digits(tokens)
                 for token in tokens:
                     if token.isdigit() and len(token) <= 2:
                         found_special.append(token)
@@ -94,6 +118,7 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
             if current_text_index + ahead_row_index >= len(filtered_text):
                 break
             tokens = filtered_text[current_text_index + ahead_row_index].split()
+            tokens = merge_split_digits(tokens)
             print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
             for token in tokens:
                 if paren_number_pattern.match(token):
@@ -121,6 +146,9 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
                 for token in special_label_tokens[special_label_token_index + 1:]:
                     if token.isdigit() and len(token) <= 2:
                         found_special.append(token)
+                    elif paren_number_pattern.match(token) and len(token) <= 4:
+                        found_special.append(token.strip('()'))
+                        break
                     else:
                         break
             else:
@@ -130,6 +158,7 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
                     if current_text_index + ahead_row_index >= len(filtered_text):
                         break
                     tokens = filtered_text[current_text_index + ahead_row_index].split()
+                    tokens = merge_split_digits(tokens)
                     for token in tokens:
                         if token.isdigit() and len(token) <= 2:
                             found_special.append(token)
@@ -146,6 +175,7 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
             if current_text_index + ahead_row_index >= len(filtered_text):
                 break
             tokens = filtered_text[current_text_index + ahead_row_index].split()
+            tokens = merge_split_digits(tokens)
             for token in tokens:
                 if token.isdigit() and len(token) <= 2:
                     found_special.append(token)
@@ -258,6 +288,7 @@ def parse_text(result, config):
                     if current_text_index + i >= len(filtered_text):
                         break
                     peek_tokens = filtered_text[current_text_index + i].split()
+                    peek_tokens = merge_split_digits(peek_tokens)
                     for peek_token in peek_tokens:
                         if peek_token.isdigit() and len(peek_token) <= 2:
                             #we found a number in the lookahead, this is a good sign that we have found a valid row label
@@ -284,6 +315,7 @@ def parse_text(result, config):
                     #find main numbers (and grab special if possible)
                     while len(found_numbers) < config['main']:
                         tokens = filtered_text[current_text_index + ahead_row_index].split()
+                        tokens = merge_split_digits(tokens)
                         for token in tokens:
                             if token.isdigit() and len(token) <= 2:
                                 if len(found_numbers) < config['main']: #add only if we still have room in the found_numbers list, otherwise this digit must be the special number
@@ -338,6 +370,7 @@ def parse_text(result, config):
             if i + ahead >= len(filtered_text):
                 break
             tokens = filtered_text[i + ahead].split()
+            tokens = merge_split_digits(tokens)
             print(f"[DEBUG] Lookahead text: {filtered_text[i + ahead]} | Tokens: {tokens}")
             for token in tokens:
                 print(f"[DEBUG] Checking token: {token} | Candidate Numbers: {candidate_numbers} | Candidate Special: {candidate_special} | Special Label Token: {special_label_token}")
@@ -397,7 +430,7 @@ def parse_text(result, config):
             # count how many numbers appear in both entries
             matches = sum(1 for num in entry_a if num in entry_b)
 
-            if matches >= config['main'] - 1:
+            if matches >= config['main'] - 2:
                 to_remove.add(j) #mark for removal
 
     #remake the lists without the marked entries
