@@ -121,7 +121,7 @@ def check_for_win(game, user_numbers, specials, df, draw_date_s=None, hms=False)
             if row['drawing_date'] >= draw_date_s[0] and row['drawing_date'] <= draw_date_s[1]:
                 matched = check_for_matched(game, user_numbers, specials, row)
                 win_dict = build_win_dict(row, matched)
-                print(win_dict)
+                # print(win_dict)
                 if [win_dict['number_of_matched_numbers'], win_dict['number_of_matched_specials']] in matches_needed:
                     potential_wins.append(win_dict)
         if potential_wins == []:
