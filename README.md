@@ -20,9 +20,13 @@ This will be done using image recognition techniques to determine lottery ticket
 - Can get the date of the lottery draw from OCR results
 - Getting the numbers from the lottery ticket using OCR (currently has some reliability issues that are being slowly fixed).
 
-
 ## Currently Developing
 - Creating a terminal-based user interface to create core app functionality, then will move on to a more user-friendly interface.
+
+## Known Issues
+- The OCR for extracting numbers is not reliable, so not all lottery numbers/dates will be extracted from the text.
+- Date extraction faces the same problem as above
+- Perspecive correction doesn't always find the corners of the lottery ticket
 
 ## Things to add
 - A better ticket classifier with higher accuracy.
