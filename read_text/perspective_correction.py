@@ -140,8 +140,8 @@ def detect_image_corners(image_path):
                                                                                                            #Contours are simply curves that join all the continuous points along a boundary that have the same color or intensity.
     
     contours = sorted(contours, key=cv2.contourArea, reverse=True) #sort the contours by area, largest to smallest
-
-    print(len(contours), "contours found") #print the number of contours found for debugging purposes
+    # print(len(contours), "contours found") #print the number of contours found for debugging purposes
+    
     ticket_corners = None
     for contour in contours[:30]: #look at the 30 largest contours (we can adjust this number if needed)
         if cv2.contourArea(contour) < min_area:
@@ -182,7 +182,7 @@ def correct_image(image_path):
     """
 
     image = read_image(image_path)
-    print("dimensions ", image.shape)
+    # print("dimensions ", image.shape)
     
     margin = 300
     src_points = detect_image_corners(image_path) #detect the corners of the ticket in the image

@@ -119,7 +119,7 @@ def find_special_numbers(filtered_text, current_text_index, ahead_row_index, fou
                 break
             tokens = filtered_text[current_text_index + ahead_row_index].split()
             tokens = merge_split_digits(tokens)
-            print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
+            # print(f"[DEBUG BUFFER] Scanning row: {filtered_text[current_text_index + ahead_row_index]} | ahead_row_index={ahead_row_index} | buffer={buffer}")
             for token in tokens:
                 if paren_number_pattern.match(token):
                     # parenthesized number — grab it directly
@@ -208,6 +208,8 @@ def parse_text(result, config):
     month_I_pattern = re.compile(r'\b(JANI|FEBI|MARI|APRI|MAYI|JUNI|JULI|AUGI|SEPI|OCTI|NOVI|DECI)(\d)', re.IGNORECASE)
     month_O_pattern = re.compile(r'\b(JANO|FEBO|MARO|APRO|MAYO|JUNO|JULO|AUGO|SEPO|OCTO|NOVO|DECO)(\d)', re.IGNORECASE)
     month_Q_pattern = re.compile(r'\b(JANQ|FEBQ|MARQ|APRQ|MAYQ|JUNQ|JULQ|AUGQ|SEPQ|OCTQ|NOVQ|DECQ)(\d)', re.IGNORECASE)
+    month_T_pattern = re.compile(r'\b(JANT|FEBT|MART|APRT|MAYT|JUNT|JULT|AUGT|SEPT|OCTT|NOVT|DECT)(\d)', re.IGNORECASE)
+
     month_fused_with_date_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{1,2})\b', re.IGNORECASE)
 
     for text in filtered_text:
@@ -219,6 +221,7 @@ def parse_text(result, config):
         month_I_match = month_I_pattern.search(text)
         month_O_match = month_O_pattern.search(text)
         month_Q_match = month_Q_pattern.search(text)
+        month_T_match = month_T_pattern.search(text)
         month_fused_with_date_match = month_fused_with_date_pattern.search(text)
 
         if month_I_match:
@@ -233,6 +236,10 @@ def parse_text(result, config):
             special_case = "Q"
             month = month_Q_match.group(1)[:-1]
             digit = month_Q_match.group(2)
+        elif month_T_match:
+            special_case = "T"
+            month = month_T_match.group(1)[:-1]
+            digit = month_T_match.group(2)
         elif month_fused_with_date_pattern.search(text):
             special_case = "FUSED"
             month = month_fused_with_date_match.group(1)
@@ -252,6 +259,8 @@ def parse_text(result, config):
             possible_dates.append([month, '0' + digit])
         elif special_case == "Q" and digit:
             possible_dates.append([month, '0' + digit])
+        elif special_case == "T" and digit:
+            possible_dates.append([month, '1' + digit]) 
         elif special_case == "FUSED" and month and digit:
             possible_dates.append([month, digit])
 
@@ -339,7 +348,7 @@ def parse_text(result, config):
                             break
 
                     draw_numbers.append(found_numbers)
-                    print(f"[DEBUG] After main number loop: ahead_row_index={ahead_row_index}, found_numbers={found_numbers}, found_special={found_special}")
+                    # print(f"[DEBUG] After main number loop: ahead_row_index={ahead_row_index}, found_numbers={found_numbers}, found_special={found_special}")
 
                     found_special = find_special_numbers(filtered_text, current_text_index, ahead_row_index, found_special, special_label_token, special_label_token_index, special_label_tokens, config)
                     draw_special.append(found_special)
@@ -349,15 +358,15 @@ def parse_text(result, config):
         if current_text_index >= len(filtered_text) or draw_row >= len(rows):
             break
 
-    print("Draw Numbers after row label parsing:", draw_numbers)
-    print("Draw Special after row label parsing:", draw_special)
+    # print("Draw Numbers after row label parsing:", draw_numbers)
+    # print("Draw Special after row label parsing:", draw_special)
 
     #now there may be some draw numbers that didnt have a row label which we might still be able to find,
     #so we will look through the text again and try to find any numbers that are not already in our
     #draw numbers list that look like the way the draw numbers should be and add them to the final lists.
     i = 0
     while i < len(filtered_text):
-        print("[DEBUG] Checking text for unlabeled numbers:", filtered_text[i])
+        # print("[DEBUG] Checking text for unlabeled numbers:", filtered_text[i])
         candidate_numbers = []
         candidate_special = []
         special_label_token = False
@@ -371,9 +380,9 @@ def parse_text(result, config):
                 break
             tokens = filtered_text[i + ahead].split()
             tokens = merge_split_digits(tokens)
-            print(f"[DEBUG] Lookahead text: {filtered_text[i + ahead]} | Tokens: {tokens}")
+            # print(f"[DEBUG] Lookahead text: {filtered_text[i + ahead]} | Tokens: {tokens}")
             for token in tokens:
-                print(f"[DEBUG] Checking token: {token} | Candidate Numbers: {candidate_numbers} | Candidate Special: {candidate_special} | Special Label Token: {special_label_token}")
+                # print(f"[DEBUG] Checking token: {token} | Candidate Numbers: {candidate_numbers} | Candidate Special: {candidate_special} | Special Label Token: {special_label_token}")
                 if token.isdigit() and len(token) <= 2:
                     if special_label_token: #then this digit is the special number
                         candidate_special.append(token)
@@ -403,13 +412,13 @@ def parse_text(result, config):
         if len(candidate_numbers) == config['main']:
             already_found = any(candidate_numbers == entry for entry in draw_numbers)
             if not already_found:
-                print(f"[DEBUG] Found candidate numbers: {candidate_numbers} | Candidate special: {candidate_special}")
+                # print(f"[DEBUG] Found candidate numbers: {candidate_numbers} | Candidate special: {candidate_special}")
                 draw_numbers.append(candidate_numbers)
                 draw_special.append(candidate_special if candidate_special else [])
         i += 1
 
-    print("Draw Numbers after lookahead parsing:", draw_numbers)
-    print("Draw Special after lookahead parsing:", draw_special)
+    # print("Draw Numbers after lookahead parsing:", draw_numbers)
+    # print("Draw Special after lookahead parsing:", draw_special)
 
     #for some reason, we might get duplicates/false draw numbers from the above logic, so we try to
     #find those and then remove them here
@@ -437,8 +446,8 @@ def parse_text(result, config):
     draw_numbers = [entry for idx, entry in enumerate(draw_numbers) if idx not in to_remove]
     draw_special = [entry for idx, entry in enumerate(draw_special) if idx not in to_remove]
 
-    print("Draw Numbers after duplicate removal:", draw_numbers)
-    print("Draw Special after duplicate removal:", draw_special)
+    # print("Draw Numbers after duplicate removal:", draw_numbers)
+    # print("Draw Special after duplicate removal:", draw_special)
 
     return possible_dates, possible_weekdays, draw_numbers, draw_special
 
@@ -448,7 +457,7 @@ def read_image_text(image_path, game):
     if corrected_image is not None:
         result = get_text(corrected_image) #read the text from the corrected image
     else:
-        print("[MAIN]: Could not correct the perspective of the image, reading text from the original image")
+        # print("[MAIN]: Could not correct the perspective of the image, reading text from the original image")
         image = open_image(image_path) #read the image using OpenCV
         result = get_text(image)
 
@@ -457,8 +466,7 @@ def read_image_text(image_path, game):
         print(f'Counter: {counter}, Text: {text}, Probability: {prob}')
         counter += 1
 
-    result = parse_text(result, LOTTERY_CONFIGS.get(game)) #parse the extracted text to find the relevant information
-    return result
+    return parse_text(result, LOTTERY_CONFIGS.get(game)) #parse the extracted text to find the relevant information
 
 
 if __name__ == "__main__":

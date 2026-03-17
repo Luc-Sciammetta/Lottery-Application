@@ -18,14 +18,16 @@ This will be done using image recognition techniques to determine lottery ticket
 - A realtively (89% test accuracy with dataset images) accurate ticket classifier using PyTorch to identify lottery ticket types from images.
 - A perspective correction module using OpenCV to correct the perspective of the lottery ticket images before performing OCR (still needing to be implemented).
 - Can get the date of the lottery draw from OCR results
+- Getting the numbers from the lottery ticket using OCR (currently has some reliability issues that are being slowly fixed).
 
 
 ## Currently Developing
-- Getting the numbers from the lottery ticket using OCR (currently has some reliability issues that are being fixed).
-- A more accurate way of getting the corners of the lottery ticket for perspective warping. 
+- Creating a terminal-based user interface to create core app functionality, then will move on to a more user-friendly interface.
 
 ## Things to add
 - A better ticket classifier with higher accuracy.
 - User interface for easier interaction.
 - Support for more lottery games
+- A more accurate way of getting the corners of the lottery ticket for perspective warping. 
+
 

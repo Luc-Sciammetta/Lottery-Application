@@ -30,8 +30,17 @@ features = {
     "powerball": ["drawing_date","ball1","ball2","ball3","ball4","ball5","powerball","multiplier","jackpot","estimated_cash_value"],
     "megamillions": ["drawing_date","ball1","ball2","ball3","ball4","ball5","megaball","jackpot","estimated_cash_value","multiplier"],
     "euromillions": ["drawing_date","ball1","ball2","ball3","ball4","ball5","star1","star2","jackpot","prizes"],
-    "eurojackpot": ["drawing_date","ball1","ball2","ball3","ball4","ball5","euro1","euro2"], #jackpot_millions? marketing_jackpot_millions? special_marketing_jackpot_millions?
+    "eurojackpot": ["drawing_date","ball1","ball2","ball3","ball4","ball5","euro1","euro2"],
     "lottoamerica": ["drawing_date","ball1","ball2","ball3","ball4","ball5","starball","bonus","jackpot"]
+}
+
+# Rename special balls to a consistent "special" naming convention
+special_renames = {
+    "powerball": {"powerball": "special"},
+    "megamillions": {"megaball": "special"},
+    "euromillions": {"star1": "special1", "star2": "special2"},
+    "eurojackpot": {"euro1": "special1", "euro2": "special2"},
+    "lottoamerica": {"starball": "special"},
 }
 
 def get_response(url, headers):
@@ -56,20 +65,15 @@ def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
 
     if 'message' in json_data:
         print(f"Error fetching data: {json_data['message']}")
-        return pd.DataFrame()  # Return empty DataFrame on error
+        return pd.DataFrame()
 
     df = pd.DataFrame(json_data['data'])
-
     df = df.loc[:, df.columns.intersection(features[game])]
     df['drawing_date'] = pd.to_datetime(df['drawing_date'])
 
-    
     for col in df.columns:
-        # skip known special columns
         if col in {"prizes", "drawing_date"}:
             continue
-
-        # only apply string operations to string columns
         if is_string_dtype(df[col]):
             df[col] = (
                 df[col]
@@ -79,6 +83,7 @@ def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
                 .astype(int)
             )
 
+    df = df.rename(columns=special_renames.get(game, {}))
     df = df.iloc[::-1].reset_index(drop=True)
 
     df.to_csv(f"lottery_data/{game}.csv", index=False)
@@ -102,6 +107,5 @@ def main():
     make_dataset("megamillions")
     make_dataset("euromillions")
     make_dataset("lottoamerica")
-    # print(get_dataset("powerball"))
 
 main()
