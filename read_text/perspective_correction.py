@@ -14,7 +14,7 @@ def read_image(image_path):
     """
     img = cv2.imread(image_path) #read the image using OpenCV
     if img is None:
-        print(f"[READ IMAGE]: Could not read image from {image_path}")
+        # print(f"[READ IMAGE]: Could not read image from {image_path}")
         sys.exit(1) #!not the best of error handling 
     return img
 
@@ -155,7 +155,7 @@ def detect_image_corners(image_path):
             break
 
     if ticket_corners is None:
-        print("[DETECT IMAGE CORNERS]: Could not find ticket corners.")
+        # print("[DETECT IMAGE CORNERS]: Could not find ticket corners.")
         return None
 
     # Draw the 4 corners on the image so you can verify
@@ -165,9 +165,9 @@ def detect_image_corners(image_path):
     # Draw the outline too
     cv2.drawContours(image_copy, [ticket_corners.reshape(4, 1, 2)], -1, (0, 255, 0), 3)
 
-    cv2.imshow('Detected Ticket', image_copy)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Detected Ticket', image_copy)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     return ticket_corners.astype(np.float32) #return the corners as a 4x2 array of floats (this is the format needed for the perspective transform)
     
@@ -213,7 +213,7 @@ def correct_image(image_path):
         corrected_image = apply_warping(image_path, src_points, dst_points, output_width, output_height) #correct the perspective of the image using the detected corners and the defined destination points
 
         if corrected_image is None:
-            print("[CORRECT IMAGE]: Could not apply warping to the image")
+            # print("[CORRECT IMAGE]: Could not apply warping to the image")
             return None
 
         return corrected_image

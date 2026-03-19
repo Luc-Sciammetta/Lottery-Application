@@ -51,7 +51,7 @@ def convert_date(dates):
     for i in range(len(dates)):
         group = dates[i]
         month = group[0].upper().strip()
-        day = group[1]
+        day = group[1].strip()
         if day.isdigit():
             day = int(day)
         else:
@@ -105,6 +105,32 @@ def change_details(dates, draw_numbers, draw_special):
         print("\nInvalid detail type. Please enter 'd', 'n', or 's'.")
     return dates, draw_numbers, draw_special
 
+
+def check_numbers_for_OCR_mistakes(numbers):
+    """Sometimes the OCR will mistake a 1 for a 7, so we need to check to see if this happens.
+    We can detect this since the numbers on a lottery ticket are in ascending order
+    Args:
+        numbers (list): A list of lists containing the extracted numbers.
+    Returns:
+        list: The list of lists with corrected numbers.
+    """
+    for draw_numbers in numbers:
+        for i in range(1, len(draw_numbers)):
+            last_number = draw_numbers[i-1]
+            current_number = draw_numbers[i]
+            if int(current_number) < int(last_number):
+                if '7' in last_number[0] and '0' not in last_number[1]:
+                    #then this is a 7 that is supposed to be a 1. We have to do the final check of the 0 since
+                    #megamillions has numbers that go up to 70, so if we have a number that is 70+, then it is 
+                    #obviously wrong
+                    corrected_number = last_number.replace('7', '1')
+                    draw_numbers[i-1] = corrected_number
+                if '7' in last_number[1]: #then this is a 7 that is supposed to be a 1
+                    corrected_number = last_number.replace('7', '1')
+                    draw_numbers[i-1] = corrected_number
+    
+    return numbers
+
     
 def main():
     while True:
@@ -116,21 +142,23 @@ def main():
         elif not image_path:
             print("No path entered. Please try again.")
             continue
-        
+
+
         model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth") #load a pre-trained model
         ticket_type = predict_image(model, image_path) #path to a test image
-
+        
         dates, weekdays, draw_numbers, draw_special = read_image_text(image_path, ticket_type) #path to a test image and the predicted ticket type
-
-        print("\n[DEBUG] Before cleaning draw numbers:", draw_numbers)
-        print("[DEBUG] Before cleaning draw special:", draw_special)
-        print("[DEBUG] Before converting dates:", dates)
     
+
+        # print("\n[DEBUG] Before cleaning draw numbers:", draw_numbers)
+        # print("[DEBUG] Before cleaning draw special:", draw_special)
+        # print("[DEBUG] Before converting dates:", dates)
+        draw_numbers = check_numbers_for_OCR_mistakes(draw_numbers)
         draw_numbers = clean_numbers(draw_numbers)
         draw_special = clean_numbers(draw_special)
 
         converted_dates = convert_date(dates)
-
+        
         print("\nHere are the extracted details from your ticket:")
         print(f"Ticket Type: {ticket_type}")
         print(f"Draw Date (there will be 2 dates if its a range): {converted_dates}")

@@ -114,6 +114,9 @@ def check_for_win(game, user_numbers, specials, df, draw_date_s=None, hms=False)
         None: If no wins are found.
     """
     matches_needed = lowest_to_win[game]
+
+    if draw_date_s is None:
+        draw_date_s = []
     
     if len(draw_date_s) == 2: #ticket is valid for an interval of time
         potential_wins = []

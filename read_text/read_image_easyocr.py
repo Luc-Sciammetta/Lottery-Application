@@ -6,6 +6,7 @@ It defines a function `read_image` that takes the path to an image file and retu
 import easyocr
 import numpy as np
 import re
+import datetime
 
 from PIL import Image
 
@@ -202,15 +203,17 @@ def parse_text(result, config):
     filtered_text = [text for bbox, text, prob in result if prob > 0.15] # Filter out text with low probability
 
     #get the date of the lottery draw
-    month_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s*\b', re.IGNORECASE)
-    date_pattern = re.compile(r'\b(\d{1,2})\b') #tries to find any standalone numbers that could be a date, we will later filter these based on their proximity to month names and other special cases
-    weekday_pattern = re.compile(r'\b(MON|TUE|WED|THU|FRI|SAT|SUN|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\s*\b', re.IGNORECASE)
-    month_I_pattern = re.compile(r'\b(JANI|FEBI|MARI|APRI|MAYI|JUNI|JULI|AUGI|SEPI|OCTI|NOVI|DECI)(\d)', re.IGNORECASE)
-    month_O_pattern = re.compile(r'\b(JANO|FEBO|MARO|APRO|MAYO|JUNO|JULO|AUGO|SEPO|OCTO|NOVO|DECO)(\d)', re.IGNORECASE)
-    month_Q_pattern = re.compile(r'\b(JANQ|FEBQ|MARQ|APRQ|MAYQ|JUNQ|JULQ|AUGQ|SEPQ|OCTQ|NOVQ|DECQ)(\d)', re.IGNORECASE)
-    month_T_pattern = re.compile(r'\b(JANT|FEBT|MART|APRT|MAYT|JUNT|JULT|AUGT|SEPT|OCTT|NOVT|DECT)(\d)', re.IGNORECASE)
+    month_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\b', re.IGNORECASE)
+    date_pattern = re.compile(r'\b(\d{1,2})\s+\b') #tries to find any standalone numbers that could be a date, we will later filter these based on their proximity to month names and other special cases
+    weekday_pattern = re.compile(r'\b(MON|TUE|WED|THU|FRI|SAT|SUN|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\s+\b', re.IGNORECASE)
+    month_I_pattern = re.compile(r'\b(JANI|FEBI|MARI|APRI|MAYI|JUNI|JULI|AUGI|SEPI|OCTI|NOVI|DECI)(\d)\s+', re.IGNORECASE)
+    month_O_pattern = re.compile(r'\b(JANO|FEBO|MARO|APRO|MAYO|JUNO|JULO|AUGO|SEPO|OCTO|NOVO|DECO)(\d)\s+', re.IGNORECASE)
+    month_Q_pattern = re.compile(r'\b(JANQ|FEBQ|MARQ|APRQ|MAYQ|JUNQ|JULQ|AUGQ|SEPQ|OCTQ|NOVQ|DECQ)(\d)\s+', re.IGNORECASE)
+    month_T_pattern = re.compile(r'\b(JANT|FEBT|MART|APRT|MAYT|JUNT|JULT|AUGT|SEPT|OCTT|NOVT|DECT)(\d)\s+', re.IGNORECASE)
+    month_bracket_pattern = re.compile(r'\b(JAN]|FEB]|MAR]|APR]|MAY]|JUN]|JUL]|AUG]|SEP]|OCT]|NOV]|DEC])(\d)\s+', re.IGNORECASE)
+    # month_jul_bracket_pattern = re.compile(r'\b(JU])\s+', re.IGNORECASE)
 
-    month_fused_with_date_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{1,2})\b', re.IGNORECASE)
+    month_fused_with_date_pattern = re.compile(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{1,2})\s+\b', re.IGNORECASE)
 
     for text in filtered_text:
         special_case = ''
@@ -222,6 +225,8 @@ def parse_text(result, config):
         month_O_match = month_O_pattern.search(text)
         month_Q_match = month_Q_pattern.search(text)
         month_T_match = month_T_pattern.search(text)
+        month_bracket_match = month_bracket_pattern.search(text)
+        # month_jul_bracket_match = month_jul_bracket_pattern.search(text)
         month_fused_with_date_match = month_fused_with_date_pattern.search(text)
 
         if month_I_match:
@@ -244,6 +249,15 @@ def parse_text(result, config):
             special_case = "FUSED"
             month = month_fused_with_date_match.group(1)
             digit = month_fused_with_date_match.group(2)
+        elif month_bracket_match:
+            special_case = "BRACKET"
+            month = month_bracket_match.group(1)[:-1]
+            digit = month_bracket_match.group(2)
+        # elif month_jul_bracket_match:
+        #     special_case = "BRACKET"
+        #     month = "JUL"
+        #     digit = month_jul_bracket_match.group(2)
+
 
         #look for perfect matches
         month_match = month_pattern.search(text)
@@ -263,13 +277,29 @@ def parse_text(result, config):
             possible_dates.append([month, '1' + digit]) 
         elif special_case == "FUSED" and month and digit:
             possible_dates.append([month, digit])
+        elif special_case == "BRACKET" and month and digit:
+            possible_dates.append([month, '1' + digit]) 
 
         #if we match a weekday
         if weekday_match:
             possible_weekdays.append(weekday_match.group())
 
-    print("Possible Dates:", possible_dates)
-    print("Possible Weekdays:", possible_weekdays)
+    #second pass to look for the month and date.
+    #this pass looks to see if we have a line that ends with a month and begins with the date
+    for idx in range(len(filtered_text) - 1):
+        current = filtered_text[idx].strip()
+        next_entry = filtered_text[idx + 1].strip()
+        
+        #check if current entry ends with a month name
+        month_end_match = re.search(r'\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*$', current, re.IGNORECASE)
+        if month_end_match:
+            #check if next entry starts with a 1-2 digit number
+            next_tokens = next_entry.split()
+            if next_tokens and next_tokens[0].isdigit() and len(next_tokens[0]) <= 2:
+                possible_dates.append([month_end_match.group(1).upper(), next_tokens[0]])
+
+    # print("Possible Dates:", possible_dates)
+    # print("Possible Weekdays:", possible_weekdays)
 
     draw_numbers = []
     draw_special = []
@@ -454,6 +484,7 @@ def parse_text(result, config):
 
 def read_image_text(image_path, game):
     corrected_image = correct_image(image_path) #correct the perspective of the image before reading the text
+
     if corrected_image is not None:
         result = get_text(corrected_image) #read the text from the corrected image
     else:
@@ -461,9 +492,10 @@ def read_image_text(image_path, game):
         image = open_image(image_path) #read the image using OpenCV
         result = get_text(image)
 
+
     counter = 0
     for (bbox, text, prob) in result:
-        print(f'Counter: {counter}, Text: {text}, Probability: {prob}')
+        # print(f'Counter: {counter}, Text: {text}, Probability: {prob}')
         counter += 1
 
     return parse_text(result, LOTTERY_CONFIGS.get(game)) #parse the extracted text to find the relevant information
