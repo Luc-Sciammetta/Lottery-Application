@@ -28,6 +28,8 @@ LOTTERY_CONFIGS = {
     "lottoamerica": {"main": 5, "special": 1, "special_labels": ['Star', "EP", "QP", "OP", "SB"]},
 }
 
+months = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12 } 
+
 paren_number_pattern = re.compile(r'^\(\d+\)$')  # matches (22), (5), etc.
 row_label_pattern = re.compile(r'^([A-J])\.?\s?(\d+)?$', re.IGNORECASE)
 
@@ -479,7 +481,95 @@ def parse_text(result, config):
     # print("Draw Numbers after duplicate removal:", draw_numbers)
     # print("Draw Special after duplicate removal:", draw_special)
 
+    draw_numbers = check_numbers_for_OCR_mistakes(draw_numbers)
+
+    draw_numbers = clean_numbers(draw_numbers)
+    draw_special = clean_numbers(draw_special)
+
+    possible_dates = convert_date(possible_dates)
+
     return possible_dates, possible_weekdays, draw_numbers, draw_special
+
+
+def check_numbers_for_OCR_mistakes(numbers):
+    """Sometimes the OCR will mistake a 1 for a 7, so we need to check to see if this happens.
+    We can detect this since the numbers on a lottery ticket are in ascending order
+    Args:
+        numbers (list): A list of lists containing the extracted numbers.
+    Returns:
+        list: The list of lists with corrected numbers.
+    """
+    for draw_numbers in numbers:
+        for i in range(1, len(draw_numbers)):
+            last_number = draw_numbers[i-1]
+            current_number = draw_numbers[i]
+            if int(current_number) < int(last_number):
+                if '7' in last_number[0] and '0' not in last_number[1]:
+                    #then this is a 7 that is supposed to be a 1. We have to do the final check of the 0 since
+                    #megamillions has numbers that go up to 70, so if we have a number that is 70+, then it is 
+                    #obviously wrong
+                    corrected_number = last_number.replace('7', '1')
+                    draw_numbers[i-1] = corrected_number
+                if '7' in last_number[1]: #then this is a 7 that is supposed to be a 1
+                    corrected_number = last_number.replace('7', '1')
+                    draw_numbers[i-1] = corrected_number
+    
+    return numbers
+
+
+def clean_numbers(draw_numbers):
+    """
+    Cleans the extracted numbers by stripping whitespace and converting to integers.
+    Args:
+        draw_numbers (list): A list of lists containing the extracted numbers.
+    Returns:        
+        list: A list of lists containing the cleaned numbers.
+    """
+    clean_numbers = []
+    for group in draw_numbers:
+        clean_group = []
+        for number in group:
+            if isinstance(number, str):
+                number = number.strip()
+                if number.isdigit():
+                    clean_group.append(int(number))
+        clean_numbers.append(clean_group)
+    return clean_numbers
+
+
+def convert_date(dates):
+    """Converts a list of dates into the format YYYY-MM-DD
+    Args:
+        dates (list): A list of dates
+    Returns:
+        list: A list of converted dates in the format YYYY-MM-DD
+    """
+    if len(dates) == 0:
+        return None
+
+    list_of_dates = []
+    for i in range(len(dates)):
+        group = dates[i]
+        month = group[0].upper().strip()
+        day = group[1].strip()
+        if day.isdigit():
+            day = int(day)
+        else:
+            raise ValueError(f"Invalid day: {day}")
+
+        if month in months:
+            month = months[month]
+        else:
+            raise ValueError(f"Invalid month: {month}")
+
+        current_year = datetime.date.today().year
+        if int(month) > datetime.date.today().month:
+            date = f"{current_year-1}-{month}-{day:02d}"
+        else:
+            date = f"{current_year}-{month}-{day:02d}"
+        
+        list_of_dates.append(date)
+    return list_of_dates
 
 
 def read_image_text(image_path, game):
