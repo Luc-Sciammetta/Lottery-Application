@@ -1,9 +1,10 @@
+import os
 import requests
+
 import pandas as pd
 from pandas.api.types import is_string_dtype
 
-import os
-print("Working directory:", os.getcwd())
+from dotenv import load_dotenv
 
 #these are the possible games that can be used:
 # "powerball" --> Powerball
@@ -15,6 +16,8 @@ print("Working directory:", os.getcwd())
 # "euromillions" --> EuroMillions
 # "eurojackpot" --> EuroJackpot
 
+load_dotenv()
+
 url = "https://api.lotterydata.io/"
 paths = {
         "latest": "{game}/v1/latest",
@@ -24,9 +27,9 @@ paths = {
         "latest_10": "/{game}/v1/latest10",
         "check_ticket": "/{game}/v1/checkticket/{drawing_date}/{num1}/{num2}/{num3}/{num4}/{num5}/{pb}"
     }
-
+    
 headers = {
-    "x-api-key": "API_KEY" 
+    "x-api-key": os.getenv("LOTTERY_API_KEY")
 }
 
 features = {
@@ -110,4 +113,4 @@ def get_dataset(game):
     return df
 
 if __name__ == "__main__":
-    make_dataset("powerball")
+    make_dataset("megamillions")
