@@ -2,6 +2,9 @@ import requests
 import pandas as pd
 from pandas.api.types import is_string_dtype
 
+import os
+print("Working directory:", os.getcwd())
+
 #these are the possible games that can be used:
 # "powerball" --> Powerball
 # "megamillions" --> Mega Millions
@@ -61,6 +64,11 @@ def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
         end_date (str): The end date in 'YYYY-MM-DD' format.
     Returns:
         pd.DataFrame: The created dataset as a DataFrame."""
+    
+    if headers['x-api-key'] == "API_KEY":
+        print("API KEY not set. Will not retrieve data from the API")
+        return pd.DataFrame()
+    
     json_data = get_response(url+paths["between_dates"].format(game=game, first_date=start_date, second_date=end_date), headers)
 
     if 'message' in json_data:
@@ -87,7 +95,6 @@ def make_dataset(game, start_date="2025-01-01", end_date="2027-01-01"):
     df = df.iloc[::-1].reset_index(drop=True)
 
     df.to_csv(f"lottery_data/{game}.csv", index=False)
-    print(df)
 
     return df
 
@@ -102,10 +109,5 @@ def get_dataset(game):
     df['drawing_date'] = pd.to_datetime(df['drawing_date'])
     return df
 
-def main():
+if __name__ == "__main__":
     make_dataset("powerball")
-    make_dataset("megamillions")
-    make_dataset("euromillions")
-    make_dataset("lottoamerica")
-
-main()

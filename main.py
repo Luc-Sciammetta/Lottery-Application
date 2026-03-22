@@ -64,12 +64,15 @@ def main():
         model = load_model("ticket_classifier_models/pt_88.52_88.89_model_weights.pth") #load a pre-trained model
         ticket_type = predict_image(model, image_path) #path to a test image
         
-        dates, weekdays, draw_numbers, draw_special = read_image_text(image_path, ticket_type) #path to a test image and the predicted ticket type
-    
+        try:
+            dates, weekdays, draw_numbers, draw_special = read_image_text(image_path, ticket_type) #path to a test image and the predicted ticket type
+        except Exception as e:
+            print(f"\nError reading image: {e}")
+            continue
+
         # print("\n[DEBUG] Before cleaning draw numbers:", draw_numbers)
         # print("[DEBUG] Before cleaning draw special:", draw_special)
         # print("[DEBUG] Before converting dates:", dates)
-        
         
         print("\nHere are the extracted details from your ticket:")
         print(f"Ticket Type: {ticket_type}")
@@ -95,7 +98,7 @@ def main():
                 print("\nInvalid response. Please enter 'yes' or 'no'.")
  
         global df
-        df = abstract_funcs.convert_to_pd(f"lottery_data/{ticket_type}", df)
+        df = abstract_funcs.convert_to_pd(ticket_type, df)
 
         for i in range(len(draw_numbers)):
             if dates is None:

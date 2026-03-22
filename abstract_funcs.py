@@ -1,5 +1,6 @@
 import pandas as pd
-
+import datetime
+from get_lottery_data_files.get_dataset_from_api import make_dataset
 
 lowest_to_win = {
     'powerball': [[5, 1], [5, 0], [4, 1], [4, 0], [3, 1], [3, 0], [2, 1], [1, 1], [0, 1]],
@@ -36,7 +37,13 @@ def convert_to_pd(game, df):
     Returns:
             pd.DataFrame: The converted DataFrame.
     """
-    df = pd.read_csv(f"{game}.csv")
+
+    df = pd.read_csv(f"lottery_data/{game}.csv")
+
+    if df.iloc[-1, 0] != datetime.datetime.now().strftime("%Y-%m-%d"): #update the csv file and remake the dataframe
+        make_dataset(game)
+        df = pd.read_csv(f"lottery_data/{game}.csv")
+
     return df
 
 def check_for_matched(game, user_numbers, specials, data):
